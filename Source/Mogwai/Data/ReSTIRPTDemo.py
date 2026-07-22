@@ -41,4 +41,4 @@ def render_graph_ReSTIRPT():
 graph_ReSTIRPT = render_graph_ReSTIRPT()
 
 m.addGraph(graph_ReSTIRPT)
-m.loadScene('VeachAjar/VeachAjarAnimated.pyscene')
+m.loadScene('Arcade/Arcade.pyscene')
