@@ -19,6 +19,17 @@
 
 using namespace Falcor;
 
+namespace Falcor
+{
+    enum class SamplingRateRIS
+    {
+        Full,
+        ThreeQuarter,
+        Half,
+        Quarter
+    };
+}
+
 /** Path tracer that uses TraceRayInline() in DXR 1.1.
 */
 class ReSTIRPTPass : public RenderPass
@@ -64,6 +75,7 @@ private:
     bool beginFrame(RenderContext* pRenderContext, const RenderData& renderData);
     void endFrame(RenderContext* pRenderContext, const RenderData& renderData);
     void generatePaths(RenderContext* pRenderContext, const RenderData& renderData, int sampleId = 0);
+    void generatePathsNaive(RenderContext* pRenderContext, const RenderData& renderData, int sampleId = 0);
     void tracePass(RenderContext* pRenderContext, const RenderData& renderData, const ComputePass::SharedPtr& pass, const std::string& passName, int sampleId);
     void PathReusePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool temporalReuse = false, int spatialRoundId = 0, bool isLastRound = false);
     void PathRetracePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool temporalReuse = false, int spatialRoundId = 0);
@@ -192,6 +204,13 @@ private:
 
 
     bool mResetRenderPassFlags = false;
+    
+    // Adaptive ReSTIR
+    uint mPatterns[4] = {0xFFFFU, 0x7BDEU, 0x9696U, 0x8421U};
+    uint mPatternNumber = 0;
+    uint mSamplingRateRIS = 3;
+    std::vector<uint> mPathIDsData = std::vector<uint>(3840 * 2160, 0u);
+    Buffer::SharedPtr mPathIDs = Buffer::create(mPathIDsData.size() * sizeof(uint), ResourceBindFlags::UnorderedAccess, Buffer::CpuAccess::Read, mPathIDsData.data());
 
     ComputePass::SharedPtr          mpSpatialReusePass;      ///< Merges reservoirs.
     ComputePass::SharedPtr          mpTemporalReusePass;      ///< Merges reservoirs.
@@ -201,6 +220,7 @@ private:
     ComputePass::SharedPtr          mpTemporalPathRetracePass;
 
     ComputePass::SharedPtr          mpGeneratePaths;                ///< Fullscreen compute pass generating paths starting at primary hits.
+    ComputePass::SharedPtr          mpGeneratePathsNaive;           ///< Fullscreen compute pass generating paths starting at primary hits.
     ComputePass::SharedPtr          mpTracePass;                    ///< Main tracing pass.
 
     ComputePass::SharedPtr          mpReflectTypes;             ///< Helper for reflecting structured buffer types.

@@ -10,6 +10,7 @@ namespace
     const char kDesc[] = "Path tracer using DXR 1.1 TraceRayInline";
 
     const std::string kGeneratePathsFilename = "RenderPasses/ReSTIRPTPass/GeneratePaths.cs.slang";
+    const std::string kGeneratePathsNaiveFilename = "RenderPasses/ReSTIRPTPass/GeneratePathsNaive.cs.slang";
     const std::string kTracePassFilename = "RenderPasses/ReSTIRPTPass/TracePass.cs.slang";
     const std::string kReflectTypesFile = "RenderPasses/ReSTIRPTPass/ReflectTypes.cs.slang";
     const std::string kSpatialReusePassFile = "RenderPasses/ReSTIRPTPass/SpatialReuse.cs.slang";
@@ -137,6 +138,14 @@ namespace
         { (uint32_t)PathSamplingMode::ReSTIR, "ReSTIR PT" },
         { (uint32_t)PathSamplingMode::PathReuse, "Bekaert-style Path Reuse" },
         { (uint32_t)PathSamplingMode::PathTracing, "Path Tracing" }
+    };
+
+    const Gui::DropdownList kSamplingRateRIS =
+    {
+        {(uint)SamplingRateRIS::Full, "Full Rate Sampling"},
+        {(uint)SamplingRateRIS::ThreeQuarter, "ThreeQuarter Rate Sampling"},
+        {(uint)SamplingRateRIS::Half, "Half Rate Sampling"},
+        {(uint)SamplingRateRIS::Quarter, "Quarter Rate Sampling"}
     };
 
     // Scripting options.
@@ -331,6 +340,7 @@ ReSTIRPTPass::ReSTIRPTPass(const Dictionary& dict)
     auto defines = mStaticParams.getDefines(*this);
 
     mpGeneratePaths = ComputePass::create(kGeneratePathsFilename, "main", defines, false);
+    mpGeneratePathsNaive = ComputePass::create(kGeneratePathsNaiveFilename, "main", defines, false);
     mpReflectTypes = ComputePass::create(kReflectTypesFile, "main", defines, false);
 
     {
@@ -655,6 +665,7 @@ void ReSTIRPTPass::setScene(RenderContext* pRenderContext, const Scene::SharedPt
         Shader::DefineList defines = mpScene->getSceneDefines();
 
         mpGeneratePaths->getProgram()->addDefines(defines);
+        mpGeneratePathsNaive->getProgram()->addDefines(defines);
         mpTracePass->getProgram()->addDefines(defines);
         mpReflectTypes->getProgram()->addDefines(defines);
 
@@ -723,10 +734,12 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
 
                 mpPathTracerBlock->getRootVar()["gSppId"] = restir_i;
                 mpPathTracerBlock->getRootVar()["gNumSpatialRounds"] = mNumSpatialRounds;
+                mPathIDs->setElement(0, 0u);
 
                 if (restir_i == 0)
                     // Generate paths at primary hits.
-                    generatePaths(pRenderContext, renderData, 0);
+                    // generatePaths(pRenderContext, renderData, 0);
+                    generatePathsNaive(pRenderContext, renderData, 0);
 
                 // Launch main trace pass.
                 tracePass(pRenderContext, renderData, mpTracePass, "tracePass", 0);
@@ -908,6 +921,8 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
                 dirty |= widget.var("Specular roughness threshold", mParams.specularRoughnessThreshold, 0.f, 1.f);
             }
         }
+
+        dirty |= widget.dropdown("Adaptive ReSTIR Naive Sampling Rate", kSamplingRateRIS, reinterpret_cast<uint32_t&>(mSamplingRateRIS));
 
         if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
         {
@@ -1160,6 +1175,7 @@ void ReSTIRPTPass::updatePrograms()
 
     // Update program specialization. This is done through defines in lieu of specialization constants.
     mpGeneratePaths->getProgram()->addDefines(defines);
+    mpGeneratePathsNaive->getProgram()->addDefines(defines);
     mpTracePass->getProgram()->addDefines(defines);
     mpReflectTypes->getProgram()->addDefines(defines);
     mpSpatialPathRetracePass->getProgram()->addDefines(defines);
@@ -1171,6 +1187,7 @@ void ReSTIRPTPass::updatePrograms()
     // Recreate program vars. This may trigger recompilation if needed.
     // Note that program versions are cached, so switching to a previously used specialization is faster.
     mpGeneratePaths->setVars(nullptr);
+    mpGeneratePathsNaive->setVars(nullptr);
     mpTracePass->setVars(nullptr);
     mpReflectTypes->setVars(nullptr);
     mpSpatialPathRetracePass->setVars(nullptr);
@@ -1601,6 +1618,39 @@ void ReSTIRPTPass::generatePaths(RenderContext* pRenderContext, const RenderData
     mpGeneratePaths->execute(pRenderContext, { mParams.screenTiles.x * tileSize, mParams.screenTiles.y, 1u });
 }
 
+void ReSTIRPTPass::generatePathsNaive(RenderContext* pRenderContext, const RenderData& renderData, int sampleId)
+{
+    PROFILE("generatePathsNaive");
+
+    // Check shader assumptions.
+    // We launch one thread group per screen tile, with threads linearly indexed.
+    const uint32_t tileSize = kScreenTileDim.x * kScreenTileDim.y;
+    assert(kScreenTileDim.x == 16 && kScreenTileDim.y == 16); // TODO: Remove this temporary limitation when Slang bug has been fixed, see comments in shader.
+    assert(kScreenTileBits.x <= 4 && kScreenTileBits.y <= 4); // Since we use 8-bit deinterleave.
+    assert(mpGeneratePathsNaive->getThreadGroupSize().x == tileSize);
+    assert(mpGeneratePathsNaive->getThreadGroupSize().y == 1 && mpGeneratePathsNaive->getThreadGroupSize().z == 1);
+
+    // Additional specialization. This shouldn't change resource declarations.
+    mpGeneratePathsNaive->addDefine("OUTPUT_TIME", mOutputTime ? "1" : "0");
+    mpGeneratePathsNaive->addDefine("OUTPUT_NRD_DATA", mOutputNRDData ? "1" : "0");
+
+    // Bind resources.
+    auto var = mpGeneratePathsNaive->getRootVar()["CB"]["gPathGenerator"];
+    setShaderData(var, renderData, false, true);
+
+    mpGeneratePathsNaive["gScene"] = mpScene->getParameterBlock();
+    var["gSampleId"] = sampleId;
+    var["gPatternNumber"] = mPatternNumber;
+    var["gPatterns"] = mPatterns[mSamplingRateRIS];
+    var["pathIDs"] = mPathIDs->asBuffer();
+
+    mPatternNumber = (mPatternNumber + 1) % 4;
+
+    // Launch one thread per pixel.
+    // The dimensions are padded to whole tiles to allow re-indexing the threads in the shader.
+    mpGeneratePathsNaive->execute(pRenderContext, { mParams.screenTiles.x * tileSize, mParams.screenTiles.y, 1u });
+}
+
 void ReSTIRPTPass::tracePass(RenderContext* pRenderContext, const RenderData& renderData, const ComputePass::SharedPtr& pass, const std::string& passName, int sampleID)
 {
     PROFILE(passName);
@@ -1623,6 +1673,7 @@ void ReSTIRPTPass::tracePass(RenderContext* pRenderContext, const RenderData& re
     // Bind the path tracer.
     var["gPathTracer"] = mpPathTracerBlock;
     var["CB"]["gSampleId"] = sampleID;
+    var["gPathIDs"] = mPathIDs;
 
     // Launch the threads.
     auto frameDim = renderData.getDefaultTextureDims();
