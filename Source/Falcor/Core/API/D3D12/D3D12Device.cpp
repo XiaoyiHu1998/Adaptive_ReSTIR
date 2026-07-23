@@ -364,6 +364,10 @@ namespace Falcor
             if (features5.RaytracingTier == D3D12_RAYTRACING_TIER_1_1) supported |= Device::SupportedFeatures::RaytracingTier1_1;
         }
 
+        // Hack to enable compatibility with RTX 5070 Ti
+        supported |= Device::SupportedFeatures::Raytracing;
+        supported |= Device::SupportedFeatures::RaytracingTier1_1;
+
         return supported;
     }
 
