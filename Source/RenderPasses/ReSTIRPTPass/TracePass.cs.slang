@@ -11,6 +11,7 @@ import PathReservoir;
 
 ParameterBlock<PathTracer> gPathTracer;
 RWBuffer<uint> gPathIDs;
+RWTexture2D<float4> outputColor; ///< Output color buffer if kSamplesPerPixel == 1.
 
 cbuffer CB
 {
@@ -49,17 +50,19 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     uint2 pixel = dispatchThreadId.xy;
     // if (all(pixel >= (gPathTracer.params.frameDim))) return;
 
+    // outputColor[pixel] = float4(float3(0.8f, 0.2f, 0.2f), 1.f);
+
     uint2 frameDim = gPathTracer.params.frameDim;
     uint pathIDIndex = 1 + pixel.x + (pixel.y * frameDim.x);
-
-    // if (pathIDIndex % 2 == 0) return;
-
     if (pathIDIndex > gPathIDs[0]) return;
-    uint pathID;
-    pathID = gPathIDs[pathIDIndex];
+
+    uint pathID = gPathIDs[pathIDIndex];
     pixel.x = pathID & 0xfff;
     pixel.y = pathID >> 12;
-    // pathID = (pixel.y << 12) | pixel.x;
+
+    // Debug
+    // outputColor[pixel] = float4(float3(0.2f, 0.8f, 0.8f), 1.f);
+    // return;
 
     // Skip pixel if there is no hit in the vbuffer. // Should be skippable now
     HitInfo hit = HitInfo(gPathTracer.vbuffer[pixel]);
@@ -84,4 +87,6 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
             tracePath(pathID, giReservoir, sampleIdx);
         }
     }
+
+    //TODO: merge new path into existing reservoir
 }

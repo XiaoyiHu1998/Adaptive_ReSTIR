@@ -206,6 +206,9 @@ private:
     bool mResetRenderPassFlags = false;
     
     // Adaptive ReSTIR
+    // Temporal Reuse
+    bool mEnableAdaptiveTemporalReuse = false;
+    // RIS Path Generation
     uint mPatterns[4] = {0xFFFFU, 0x7BDEU, 0x9696U, 0x8421U};
     uint mPatternNumber = 0;
     uint mSamplingRateRIS = 3;

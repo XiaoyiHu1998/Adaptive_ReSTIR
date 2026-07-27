@@ -44,6 +44,8 @@ struct PathReusePass
     float gTemporalHistoryLength;
     bool gNoResamplingForTemporalReuse;
 
+    bool gAdaptiveReSTIR;
+
     bool isValidPackedHitInfo(PackedHitInfo packed)
     {
         return packed.x != 0;
@@ -77,6 +79,106 @@ struct PathReusePass
         return sd;
     }
 
+    // Adaptive ReSTIR takes the Talbot MISKind code as base for now
+    // TODO: migrate Adaptive ReSTIR Temporal pass to own pass/codepath type
+    void AdaptiveReSTIR(const uint2 pixel)
+    { 
+        var sg = TinyUniformSampleGenerator(pixel, (kCandidateSamples + 1 + gNumSpatialRounds) * params.seed + kCandidateSamples);
+
+        // Compute offset into per-sample buffers. All samples are stored consecutively at this offset.
+        const uint centralOffset = params.getReservoirOffset(pixel);
+        PathReservoir dstReservoir = outputReservoirs[centralOffset];
+        PathReservoir centralReservoir = dstReservoir; // TODO: Doesn't seem to be used
+        float currentM = dstReservoir.M;
+        float3 initialColor = dstReservoir.F * dstReservoir.weight; // TODO: Doesn't seem to be used
+
+        dstReservoir.init();
+
+        PackedHitInfo centralPrimaryHitPacked;
+        ShadingData centralPrimarySd = getPixelShadingData(pixel, centralPrimaryHitPacked);
+        if (!isValidPackedHitInfo(centralPrimaryHitPacked)) return;
+
+        float3 color = 0.f;
+        ReconnectionData dummyRcData;
+        dummyRcData.Init();
+
+        {
+            bool chooseCurrent = true;
+
+            // color averaging test
+
+            // fetch temporal reservoir
+            float2 motionVector = motionVectors[pixel];
+            int2 prevPixel = pixel;
+
+            bool foundTemporalSurface = true;
+
+            if (gEnableTemporalReprojection)
+            {
+                prevPixel = pixel + motionVector * params.frameDim + (sampleNext2D(sg) * 1.f - 0.f);
+            }
+
+            // if (!isValidScreenRegion(prevPixel) || !foundTemporalSurface) return;
+            if (!isValidScreenRegion(prevPixel) || !foundTemporalSurface)
+            {
+                outputReservoirs[centralOffset] = dstReservoir;
+                outputColor[pixel] = float4(color / kSamplesPerPixel, 1.f);
+                return;
+            };
+
+            PackedHitInfo temporalPrimaryHitPacked;
+            ShadingData temporalPrimarySd = getPixelTemporalShadingData(prevPixel, temporalPrimaryHitPacked);
+            // if (!isValidPackedHitInfo(temporalPrimaryHitPacked)) return;
+            if (!isValidPackedHitInfo(temporalPrimaryHitPacked))
+            {
+                outputReservoirs[centralOffset] = dstReservoir;
+                outputColor[pixel] = float4(color / kSamplesPerPixel, 1.f);
+                return;
+            };
+
+            bool doTemporalUpdateForDynamicScene = kTemporalUpdateForDynamicScene;
+
+            PathReservoir temporalReservoir = temporalReservoirs[params.getReservoirOffset(prevPixel)];
+
+            temporalReservoir.M = min(gTemporalHistoryLength * currentM, temporalReservoir.M);
+
+            float dstJacobian;
+
+            bool withinDistance = length(temporalPrimarySd.posW - centralPrimarySd.posW) <= length(centralPrimarySd.posW - gScene.camera.getPosition()) * 0.1f;
+            bool sameNormal = dot(temporalPrimarySd.N, centralPrimarySd.N) > 0.5f;
+            bool validTemporalReservoir = withinDistance && sameNormal;
+
+            if (withinDistance && sameNormal)
+            {
+                // Set current Reservoir to prev reservoir
+                PathReservoir newReservoir = temporalReservoir;
+                outputReservoirs[centralOffset] = newReservoir;
+                color = newReservoir.F * newReservoir.weight;
+                // TODO: Add path shifts
+
+                if (gIsLastRound)
+                {
+                    if (useDirectLighting)
+                    {
+                        color += directLighting[pixel].rgb;
+                        if (any(isnan(color) || isinf(color))) color = 0.f;
+                    }
+
+                    outputColor[pixel] = float4(color / kSamplesPerPixel, 1.f);
+
+                    // Debug
+                    // outputColor[pixel] = float4(0.8f, 0.2f, 0.2f, 1.0f);
+                }
+            }
+            else
+            {
+                dstReservoir.init();
+                outputReservoirs[centralOffset] = dstReservoir;
+                outputColor[pixel] = float4(float3(0.f), 1.f);
+            }
+        }
+    }
+
     /*
     * Build a reservoir of paths whose suffix can be merged to a pixel's prefix.
     * This method is optimized for small windows such that we can run the entire
@@ -89,9 +191,9 @@ struct PathReusePass
         // Compute offset into per-sample buffers. All samples are stored consecutively at this offset.
         const uint centralOffset = params.getReservoirOffset(pixel);
         PathReservoir dstReservoir = outputReservoirs[centralOffset];
-        PathReservoir centralReservoir = dstReservoir;
+        PathReservoir centralReservoir = dstReservoir; // TODO: Doesn't seem to be used
         float currentM = dstReservoir.M;
-        float3 initialColor = dstReservoir.F * dstReservoir.weight;
+        float3 initialColor = dstReservoir.F * dstReservoir.weight; // TODO: Doesn't seem to be used
 
         if (ReSTIRMISKind(kTemporalReSTIRMISKind) == ReSTIRMISKind::Talbot)
         {
@@ -140,6 +242,7 @@ struct PathReusePass
 
             float dstJacobian;
 
+// #region Talbot RMIS
             ///////////////////
             /// TALBOT RMIS ///
             ///////////////////
@@ -224,6 +327,8 @@ struct PathReusePass
                     dstReservoir.finalizeGRIS();
                 }
             }
+
+// #region ConstantMIS
             /////////////////////
             /// CONSTANT RMIS ///
             /////////////////////
@@ -294,6 +399,7 @@ struct PathReusePass
 
                 dstReservoir.finalizeRIS();
             }
+// #endregion
 
             if (dstReservoir.weight < 0.f || isinf(dstReservoir.weight) || isnan(dstReservoir.weight)) dstReservoir.weight = 0.f;
             outputReservoirs[centralOffset] = dstReservoir;
@@ -324,7 +430,14 @@ struct PathReusePass
         printSetPixel(pixel);
         logSetPixel(pixel);
 
-        ReSTIR(pixel);
+        if (gAdaptiveReSTIR)
+        {
+            AdaptiveReSTIR(pixel);
+        }
+        else
+        {
+            ReSTIR(pixel);
+        }
     }
 };
 

@@ -140,6 +140,7 @@ namespace
         { (uint32_t)PathSamplingMode::PathTracing, "Path Tracing" }
     };
 
+    // Adaptive ReSTIR Naive Generation Scheme
     const Gui::DropdownList kSamplingRateRIS =
     {
         {(uint)SamplingRateRIS::Full, "Full Rate Sampling"},
@@ -147,6 +148,8 @@ namespace
         {(uint)SamplingRateRIS::Half, "Half Rate Sampling"},
         {(uint)SamplingRateRIS::Quarter, "Quarter Rate Sampling"}
     };
+
+    const std::string kEnableAdaptiveTemporalReuse = "enableAdaptiveTemporalReuse";
 
     // Scripting options.
     const std::string kSamplesPerPixel = "samplesPerPixel";
@@ -728,6 +731,21 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
                 pRenderContext->clearUAV(texture->getUAV().get(), uint4(0));
             }
 
+            if (mStaticParams.pathSamplingMode != PathSamplingMode::PathTracing)
+            {
+                // Launch restir merge pass.
+                if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
+                {
+                    if (mEnableAdaptiveTemporalReuse)
+                    {
+                        if (mStaticParams.shiftStrategy == ShiftMapping::Hybrid)
+                            PathRetracePass(pRenderContext, restir_i, renderData, true, 0);
+                        // a separate pass to trace rays for hybrid shift/random number replay
+                        PathReusePass(pRenderContext, restir_i, renderData, true, 0, !mEnableSpatialReuse);
+                    }
+                }
+            }
+
             {
                 assert(mpCounters);
                 pRenderContext->clearUAV(mpCounters->getUAV().get(), uint4(0));
@@ -779,9 +797,9 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
             if (restir_i == numPasses - 1)
                 mReservoirFrameCount++; // mark as at least one temporally reused frame
 
-            if (mEnableTemporalReuse && mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
+            if ((mEnableTemporalReuse || mEnableAdaptiveTemporalReuse) && mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
             {
-                if ((!mEnableSpatialReuse || mNumSpatialRounds % 2 == 0))
+                if ((!mEnableSpatialReuse || mNumSpatialRounds % 2 == 0 || mEnableAdaptiveTemporalReuse))
                     pRenderContext->copyResource(mpTemporalReservoirs[restir_i].get(), mpOutputReservoirs.get());
                 if (restir_i == numPasses - 1)
                     pRenderContext->copyResource(mpTemporalVBuffer.get(), renderData[kInputVBuffer].get());
@@ -923,11 +941,20 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
         }
 
         dirty |= widget.dropdown("Adaptive ReSTIR Naive Sampling Rate", kSamplingRateRIS, reinterpret_cast<uint32_t&>(mSamplingRateRIS));
+        if (widget.checkbox("Adaptive Temporal Reuse", mEnableAdaptiveTemporalReuse))
+        {
+            dirty = true;
+            mEnableTemporalReuse &= !mEnableAdaptiveTemporalReuse;
+        }
 
         if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
         {
             dirty |= widget.checkbox("Spatial Reuse", mEnableSpatialReuse);
-            dirty |= widget.checkbox("Temporal Reuse", mEnableTemporalReuse);
+            if (widget.checkbox("Temporal Reuse", mEnableTemporalReuse))
+            {
+                dirty = true;
+                mEnableAdaptiveTemporalReuse &= !mEnableTemporalReuse;
+            }
         }
 
         if (mStaticParams.pathSamplingMode == PathSamplingMode::PathReuse)
@@ -1675,6 +1702,9 @@ void ReSTIRPTPass::tracePass(RenderContext* pRenderContext, const RenderData& re
     var["CB"]["gSampleId"] = sampleID;
     var["gPathIDs"] = mPathIDs;
 
+    // Debug
+    var["outputColor"] = renderData[kOutputColor]->asTexture();
+
     // Launch the threads.
     auto frameDim = renderData.getDefaultTextureDims();
     pass->execute(pRenderContext, uint3(frameDim, 1u));
@@ -1730,6 +1760,9 @@ void ReSTIRPTPass::PathReusePass(RenderContext* pRenderContext, uint32_t restir_
 
     if (isTemporalReuse)
     {
+        //Adaptive ReSTIR
+        var["gAdaptiveReSTIR"] = mEnableAdaptiveTemporalReuse;
+
         var["temporalVbuffer"] = mpTemporalVBuffer;
         var["motionVectors"] = renderData[kInputMotionVectors]->asTexture();
         var["gEnableTemporalReprojection"] = mEnableTemporalReprojection;
