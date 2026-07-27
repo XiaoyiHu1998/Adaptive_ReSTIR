@@ -91,7 +91,7 @@ struct PathGenerator
             {
                 // Write background pixels.
                 writeBackground(pixel, cameraRay.dir);
-                // return;
+                return;
             }
 
             // Determine if RIS candidate needs to be generated
@@ -102,20 +102,6 @@ struct PathGenerator
             bool generateCandidate = (gPatterns & patternsMask) != 0;
             uint prefixSum = WavePrefixCountBits(generateCandidate);
             uint generateCount = WaveActiveCountBits(generateCandidate);
-            
-            // For Debugging
-            // if (!hitSurface && gSampleId == 0)
-            // {
-            //     // Write background pixels.
-            //     if (generateCandidate)
-            //     {
-            //         writeBackground(pixel, cameraRay.dir);
-            //     }
-            //     else
-            //     {
-            //         outputColor[pixel] = float4(1.0f, 0.0f, 1.0f, 1.f);
-            //     }
-            // }
 
             uint bufferOffset;
             if (WaveIsFirstLane())
