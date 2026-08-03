@@ -180,8 +180,8 @@ private:
     uint64_t                        mAccumulatedShadowRayCount = 0;
 
     // params below
-    bool                            mEnableTemporalReuse = true;
-    bool                            mEnableSpatialReuse = true;
+    bool                            mEnableTemporalReuse = false;
+    bool                            mEnableSpatialReuse = false;
     SpatialReusePattern             mSpatialReusePattern = SpatialReusePattern::Default;
     PathReusePattern                mPathReusePattern = PathReusePattern::NRooksShift;
     uint32_t                        mSmallWindowRestirWindowRadius = 2;
@@ -207,8 +207,10 @@ private:
     
     // Adaptive ReSTIR
     // Temporal Reuse
-    bool mEnableAdaptiveTemporalReuse = false;
+    bool mEnableAdaptiveTemporalReuse = true;
+    bool mValidAdaptiveHistory = false;
     // RIS Path Generation
+    bool mEnableAdaptiveRIS = true;
     uint mPatterns[4] = {0xFFFFU, 0x7BDEU, 0x9696U, 0x8421U};
     uint mPatternNumber = 0;
     uint mSamplingRateRIS = 3;

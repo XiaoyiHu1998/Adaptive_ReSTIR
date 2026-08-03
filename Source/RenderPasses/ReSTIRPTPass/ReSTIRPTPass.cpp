@@ -149,6 +149,7 @@ namespace
         {(uint)SamplingRateRIS::Quarter, "Quarter Rate Sampling"}
     };
 
+    const std::string kEnableAdaptiveRIS = "enableAdaptiveRIS";
     const std::string kEnableAdaptiveTemporalReuse = "enableAdaptiveTemporalReuse";
 
     // Scripting options.
@@ -707,6 +708,7 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
         mStaticParams.temporalMisKind = ReSTIRMISKind::Talbot;
     }
 
+    //TODO: change this for Adaptive ReSTIR
     uint32_t numPasses = mStaticParams.pathSamplingMode == PathSamplingMode::PathTracing ? 1 : mStaticParams.samplesPerPixel;
 
     for (uint32_t restir_i = 0; restir_i < numPasses; restir_i++)
@@ -731,12 +733,13 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
                 pRenderContext->clearUAV(texture->getUAV().get(), uint4(0));
             }
 
+            //Adaptive ReSTIR Temporal Reuse pass
             if (mStaticParams.pathSamplingMode != PathSamplingMode::PathTracing)
             {
                 // Launch restir merge pass.
                 if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
                 {
-                    if (mEnableAdaptiveTemporalReuse)
+                    if (mEnableAdaptiveTemporalReuse && mValidAdaptiveHistory)
                     {
                         if (mStaticParams.shiftStrategy == ShiftMapping::Hybrid)
                             PathRetracePass(pRenderContext, restir_i, renderData, true, 0);
@@ -746,30 +749,37 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
                 }
             }
 
+            // Streaming RIS pass
             {
                 assert(mpCounters);
                 pRenderContext->clearUAV(mpCounters->getUAV().get(), uint4(0));
 
-                mpPathTracerBlock->getRootVar()["gSppId"] = restir_i;
-                mpPathTracerBlock->getRootVar()["gNumSpatialRounds"] = mNumSpatialRounds;
-                mPathIDs->setElement(0, 0u);
+                if (mEnableAdaptiveRIS)
+                {
+                    mpPathTracerBlock->getRootVar()["gSppId"] = restir_i;
+                    mpPathTracerBlock->getRootVar()["gNumSpatialRounds"] = mNumSpatialRounds;
+                    mPathIDs->setElement(0, 0u);
 
-                if (restir_i == 0)
-                    // Generate paths at primary hits.
-                    // generatePaths(pRenderContext, renderData, 0);
-                    generatePathsNaive(pRenderContext, renderData, 0);
+                    if (restir_i == 0)
+                        // Generate paths at primary hits.
+                        // generatePaths(pRenderContext, renderData, 0);
+                        generatePathsNaive(pRenderContext, renderData, 0);
 
-                // Launch main trace pass.
-                tracePass(pRenderContext, renderData, mpTracePass, "tracePass", 0);
+                    // Launch main trace pass.
+                    tracePass(pRenderContext, renderData, mpTracePass, "tracePass", 0);
+                }
             }
+
+            mValidAdaptiveHistory = mEnableAdaptiveTemporalReuse;
         }
 
+        // Regular ReSTIR SpatioTemporal reuse passes
         if (mStaticParams.pathSamplingMode != PathSamplingMode::PathTracing)
         {
             // Launch restir merge pass.
             if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
             {
-                if (mEnableTemporalReuse && !skipTemporalReuse)
+                if (mEnableTemporalReuse && !skipTemporalReuse && !mEnableAdaptiveTemporalReuse)
                 {
                     if (mStaticParams.shiftStrategy == ShiftMapping::Hybrid)
                         PathRetracePass(pRenderContext, restir_i, renderData, true, 0);
@@ -941,6 +951,7 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
         }
 
         dirty |= widget.dropdown("Adaptive ReSTIR Naive Sampling Rate", kSamplingRateRIS, reinterpret_cast<uint32_t&>(mSamplingRateRIS));
+        dirty |= widget.checkbox("Adaptive RIS Naive", mEnableAdaptiveRIS);
         if (widget.checkbox("Adaptive Temporal Reuse", mEnableAdaptiveTemporalReuse))
         {
             dirty = true;
@@ -1670,6 +1681,7 @@ void ReSTIRPTPass::generatePathsNaive(RenderContext* pRenderContext, const Rende
     var["gPatternNumber"] = mPatternNumber;
     var["gPatterns"] = mPatterns[mSamplingRateRIS];
     var["pathIDs"] = mPathIDs->asBuffer();
+    var["outputReservoirs"] = mpOutputReservoirs;
 
     mPatternNumber = (mPatternNumber + 1) % 4;
 
@@ -1700,7 +1712,10 @@ void ReSTIRPTPass::tracePass(RenderContext* pRenderContext, const RenderData& re
     // Bind the path tracer.
     var["gPathTracer"] = mpPathTracerBlock;
     var["CB"]["gSampleId"] = sampleID;
+    var["CB"]["gMergePaths"] = mEnableAdaptiveTemporalReuse && mValidAdaptiveHistory ? 1 : 0;
     var["gPathIDs"] = mPathIDs;
+    var["outputReservoirs"] = mpOutputReservoirs;
+    
 
     // Debug
     var["outputColor"] = renderData[kOutputColor]->asTexture();

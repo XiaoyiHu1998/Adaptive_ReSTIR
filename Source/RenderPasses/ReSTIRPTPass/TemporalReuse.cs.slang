@@ -148,6 +148,7 @@ struct PathReusePass
             bool sameNormal = dot(temporalPrimarySd.N, centralPrimarySd.N) > 0.5f;
             bool validTemporalReservoir = withinDistance && sameNormal;
 
+            // if (withinDistance && sameNormal && temporalReservoir.weight > 0.0f)
             if (withinDistance && sameNormal)
             {
                 // Set current Reservoir to prev reservoir
@@ -172,7 +173,6 @@ struct PathReusePass
             }
             else
             {
-                dstReservoir.init();
                 outputReservoirs[centralOffset] = dstReservoir;
                 outputColor[pixel] = float4(float3(0.f), 1.f);
             }
