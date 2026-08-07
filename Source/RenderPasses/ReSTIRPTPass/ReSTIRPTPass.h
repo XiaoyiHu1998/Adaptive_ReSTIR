@@ -77,7 +77,7 @@ private:
     void generatePaths(RenderContext* pRenderContext, const RenderData& renderData, int sampleId = 0);
     void generatePathsNaive(RenderContext* pRenderContext, const RenderData& renderData, int sampleId = 0);
     void tracePass(RenderContext* pRenderContext, const RenderData& renderData, const ComputePass::SharedPtr& pass, const std::string& passName, int sampleId);
-    void PathReusePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool temporalReuse = false, int spatialRoundId = 0, bool isLastRound = false);
+    void PathReusePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool temporalReuse = false, int spatialRoundId = 0, bool isLastRound = false, bool adaptiveReproject = false);
     void PathRetracePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool temporalReuse = false, int spatialRoundId = 0);
     Texture::SharedPtr createNeighborOffsetTexture(uint32_t sampleCount);
 
@@ -214,8 +214,10 @@ private:
     uint mPatterns[4] = {0xFFFFU, 0x7BDEU, 0x9696U, 0x8421U};
     uint mPatternNumber = 0;
     uint mSamplingRateRIS = 3;
-    std::vector<uint> mPathIDsData = std::vector<uint>(3840 * 2160, 0u);
-    Buffer::SharedPtr mPathIDs = Buffer::create(mPathIDsData.size() * sizeof(uint), ResourceBindFlags::UnorderedAccess, Buffer::CpuAccess::Read, mPathIDsData.data());
+    std::vector<uint> mRISPathIDsData = std::vector<uint>(3840 * 2160, 0u);
+    std::vector<uint> mNonRISPathIDsData = std::vector<uint>(3840 * 2160, 0u);
+    Buffer::SharedPtr mRISPathIDs = Buffer::create(mRISPathIDsData.size() * sizeof(uint), ResourceBindFlags::UnorderedAccess, Buffer::CpuAccess::Read, mRISPathIDsData.data());
+    Buffer::SharedPtr mNonRISPathIDs = Buffer::create(mNonRISPathIDsData.size() * sizeof(uint), ResourceBindFlags::UnorderedAccess, Buffer::CpuAccess::Read, mNonRISPathIDsData.data());
 
     ComputePass::SharedPtr          mpSpatialReusePass;      ///< Merges reservoirs.
     ComputePass::SharedPtr          mpTemporalReusePass;      ///< Merges reservoirs.

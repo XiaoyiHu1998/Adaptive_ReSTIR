@@ -733,22 +733,6 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
                 pRenderContext->clearUAV(texture->getUAV().get(), uint4(0));
             }
 
-            //Adaptive ReSTIR Temporal Reuse pass
-            if (mStaticParams.pathSamplingMode != PathSamplingMode::PathTracing)
-            {
-                // Launch restir merge pass.
-                if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
-                {
-                    if (mEnableAdaptiveTemporalReuse && mValidAdaptiveHistory)
-                    {
-                        if (mStaticParams.shiftStrategy == ShiftMapping::Hybrid)
-                            PathRetracePass(pRenderContext, restir_i, renderData, true, 0);
-                        // a separate pass to trace rays for hybrid shift/random number replay
-                        PathReusePass(pRenderContext, restir_i, renderData, true, 0, !mEnableSpatialReuse);
-                    }
-                }
-            }
-
             // Streaming RIS pass
             {
                 assert(mpCounters);
@@ -758,7 +742,8 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
                 {
                     mpPathTracerBlock->getRootVar()["gSppId"] = restir_i;
                     mpPathTracerBlock->getRootVar()["gNumSpatialRounds"] = mNumSpatialRounds;
-                    mPathIDs->setElement(0, 0u);
+                    mRISPathIDs->setElement(0, 0u);
+                    mNonRISPathIDs->setElement(0, 0u);
 
                     if (restir_i == 0)
                         // Generate paths at primary hits.
@@ -770,7 +755,27 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
                 }
             }
 
-            mValidAdaptiveHistory = mEnableAdaptiveTemporalReuse;
+        }
+
+        //Adaptive ReSTIR Temporal Reuse pass
+        if (mStaticParams.pathSamplingMode != PathSamplingMode::PathTracing)
+        {
+            // Launch restir merge pass.
+            if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
+            {
+                if (mEnableAdaptiveTemporalReuse && mValidAdaptiveHistory)
+                {
+                    // reprojection TODO: move to own function and shader
+                    PathReusePass(pRenderContext, restir_i, renderData, true, 0, !mEnableSpatialReuse, true);
+
+                    if (mStaticParams.shiftStrategy == ShiftMapping::Hybrid)
+                        PathRetracePass(pRenderContext, restir_i, renderData, true, 0);
+                    // a separate pass to trace rays for hybrid shift/random number replay
+                    PathReusePass(pRenderContext, restir_i, renderData, true, 0, !mEnableSpatialReuse);
+                }
+
+                mValidAdaptiveHistory = mEnableAdaptiveTemporalReuse;
+            }
         }
 
         // Regular ReSTIR SpatioTemporal reuse passes
@@ -1680,7 +1685,8 @@ void ReSTIRPTPass::generatePathsNaive(RenderContext* pRenderContext, const Rende
     var["gSampleId"] = sampleId;
     var["gPatternNumber"] = mPatternNumber;
     var["gPatterns"] = mPatterns[mSamplingRateRIS];
-    var["pathIDs"] = mPathIDs->asBuffer();
+    var["gRISPathIDs"] = mRISPathIDs->asBuffer();
+    var["gNonRISPathIDs"] = mNonRISPathIDs->asBuffer();
     var["outputReservoirs"] = mpOutputReservoirs;
 
     mPatternNumber = (mPatternNumber + 1) % 4;
@@ -1713,7 +1719,8 @@ void ReSTIRPTPass::tracePass(RenderContext* pRenderContext, const RenderData& re
     var["gPathTracer"] = mpPathTracerBlock;
     var["CB"]["gSampleId"] = sampleID;
     var["CB"]["gMergePaths"] = mEnableAdaptiveTemporalReuse && mValidAdaptiveHistory ? 1 : 0;
-    var["gPathIDs"] = mPathIDs;
+    var["gRISPathIDs"] = mRISPathIDs;
+    var["gNonRISPathIDs"] = mNonRISPathIDs;
     var["outputReservoirs"] = mpOutputReservoirs;
     
 
@@ -1725,7 +1732,7 @@ void ReSTIRPTPass::tracePass(RenderContext* pRenderContext, const RenderData& re
     pass->execute(pRenderContext, uint3(frameDim, 1u));
 }
 
-void ReSTIRPTPass::PathReusePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool isTemporalReuse, int spatialRoundId, bool isLastRound)
+void ReSTIRPTPass::PathReusePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool isTemporalReuse, int spatialRoundId, bool isLastRound, bool adaptiveReproject)
 {
     bool isPathReuseMISWeightComputation = spatialRoundId == -1;
 
@@ -1776,7 +1783,10 @@ void ReSTIRPTPass::PathReusePass(RenderContext* pRenderContext, uint32_t restir_
     if (isTemporalReuse)
     {
         //Adaptive ReSTIR
-        var["gAdaptiveReSTIR"] = mEnableAdaptiveTemporalReuse;
+        var["gAdaptiveReSTIRReuse"] = mEnableAdaptiveTemporalReuse;
+        var["gAdaptiveReSTIRReproject"] = adaptiveReproject;
+        var["gRISPathIDs"] = mRISPathIDs;
+        var["gNonRISPathIDs"] = mNonRISPathIDs;
 
         var["temporalVbuffer"] = mpTemporalVBuffer;
         var["motionVectors"] = renderData[kInputMotionVectors]->asTexture();
@@ -1865,6 +1875,10 @@ void ReSTIRPTPass::PathRetracePass(RenderContext* pRenderContext, uint32_t resti
 
     if (temporalReuse)
     {
+        // Adaptive ReSTIR
+        // var["gRISPathIDs"] = mRISPathIDs;
+        // var["gNonRISPathIDs"] = mNonRISPathIDs;
+
         var["temporalVbuffer"] = mpTemporalVBuffer;
         var["motionVectors"] = renderData[kInputMotionVectors]->asTexture();
         var["gEnableTemporalReprojection"] = mEnableTemporalReprojection;

@@ -47,7 +47,9 @@ struct PathGenerator
     RestirPathTracerParams params; ///< Runtime parameters.
     Texture2D<PackedHitInfo> vbuffer; ///< Fullscreen V-buffer for the primary hits.
     RWTexture2D<float4> outputColor;  ///< Output color buffer if kSamplesPerPixel == 1.
-    RWBuffer<uint> pathIDs;
+    RWBuffer<uint> gRISPathIDs;
+    RWBuffer<uint> gNonRISPathIDs;
+    RWStructuredBuffer<PathReservoir> outputReservoirs; // reservoir for next pass
 
     int gSampleId;
     // uint gSamplingRateRIS; // Shading rates : [0: full, 1: three - quarters, 2: half, 3: quarter]
@@ -98,23 +100,42 @@ struct PathGenerator
             uint mortonIdx = threadIdx % 4;                                        // pixel index in 2x2 morton-order grid
             uint patternsMask = (1 << (3 - mortonIdx)) << ((3 - gPatternNumber) * 4); // mask used to select pixel from patterns
 
-            // Write pathID to pathIDs buffer for each RIS candidate using prefix sum
-            bool generateCandidate = (gPatterns & patternsMask) != 0;
-            uint prefixSum = WavePrefixCountBits(generateCandidate);
-            uint generateCount = WaveActiveCountBits(generateCandidate);
+            // Write pathID to gRISPathIDs buffer for each RIS candidate pixel using prefix sum
+            bool RISPixel = (gPatterns & patternsMask) != 0;
+            uint prefixSum = WavePrefixCountBits(RISPixel);
+            uint generateCount = WaveActiveCountBits(RISPixel);
 
             uint bufferOffset;
             if (WaveIsFirstLane())
             {
-                InterlockedAdd(pathIDs[0], generateCount, bufferOffset); // TODO: Remember to reset to 0 in later shader passes
+                InterlockedAdd(gRISPathIDs[0], generateCount, bufferOffset);
             }
             bufferOffset = WaveReadLaneFirst(bufferOffset) + 1;
             bufferOffset += prefixSum;
 
             GroupMemoryBarrierWithGroupSync();
-            if (generateCandidate)
+            if (RISPixel)
             {
-                pathIDs[bufferOffset] = (pixel.y << 12) | pixel.x;
+                gRISPathIDs[bufferOffset] = (pixel.y << 12) | pixel.x;
+            }
+
+            // Write pathID to gNonRISPathIDs buffer for each non-RIS candidate pixel using prefix sum
+            bool NonRISPixel = !RISPixel;
+            prefixSum = WavePrefixCountBits(NonRISPixel);
+            generateCount = WaveActiveCountBits(NonRISPixel);
+
+            bufferOffset;
+            if (WaveIsFirstLane())
+            {
+                InterlockedAdd(gNonRISPathIDs[0], generateCount, bufferOffset); // TODO: Remember to reset to 0 later
+            }
+            bufferOffset = WaveReadLaneFirst(bufferOffset) + 1;
+            bufferOffset += prefixSum;
+
+            GroupMemoryBarrierWithGroupSync();
+            if (NonRISPixel)
+            {
+                gNonRISPathIDs[bufferOffset] = (pixel.y << 12) | pixel.x;
             }
         }
     }
