@@ -388,8 +388,8 @@ struct PathReusePass
 
             float dstJacobian;
 
-            bool withinDistance = length(temporalPrimarySd.posW - centralPrimarySd.posW) <= length(centralPrimarySd.posW - gScene.camera.getPosition()) * 0.1f;
-            bool sameNormal = dot(temporalPrimarySd.N, centralPrimarySd.N) > 0.5f;
+            bool withinDistance = length(temporalPrimarySd.posW - centralPrimarySd.posW) <= length(centralPrimarySd.posW - gScene.camera.getPosition()) * 0.075f;
+            bool sameNormal = dot(temporalPrimarySd.N, centralPrimarySd.N) > 0.9f;
             bool validTemporalReservoir = withinDistance && sameNormal;
 
             // if (withinDistance && sameNormal && temporalReservoir.weight > 0.0f)
