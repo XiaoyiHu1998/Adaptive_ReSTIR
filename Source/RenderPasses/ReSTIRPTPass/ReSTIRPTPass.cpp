@@ -765,13 +765,15 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
             {
                 if (mEnableAdaptiveTemporalReuse && mValidAdaptiveHistory)
                 {
-                    // reprojection TODO: move to own function and shader
-                    PathReusePass(pRenderContext, restir_i, renderData, true, 0, !mEnableSpatialReuse, true);
-
                     if (mStaticParams.shiftStrategy == ShiftMapping::Hybrid)
                         PathRetracePass(pRenderContext, restir_i, renderData, true, 0);
                     // a separate pass to trace rays for hybrid shift/random number replay
                     PathReusePass(pRenderContext, restir_i, renderData, true, 0, !mEnableSpatialReuse);
+
+                    // Adaptive ReSTIR reprojection
+                    // TODO: move to own function and shader
+                    // TODO: Add check for enough temporal reprojections before you can reuse
+                    PathReusePass(pRenderContext, restir_i, renderData, true, 0, !mEnableSpatialReuse, true);
                 }
 
                 mValidAdaptiveHistory = mEnableAdaptiveTemporalReuse;
@@ -1782,7 +1784,7 @@ void ReSTIRPTPass::PathReusePass(RenderContext* pRenderContext, uint32_t restir_
 
     if (isTemporalReuse)
     {
-        //Adaptive ReSTIR
+        // Adaptive ReSTIR
         var["gAdaptiveReSTIRReuse"] = mEnableAdaptiveTemporalReuse;
         var["gAdaptiveReSTIRReproject"] = adaptiveReproject;
         var["gRISPathIDs"] = mRISPathIDs;
@@ -1876,8 +1878,8 @@ void ReSTIRPTPass::PathRetracePass(RenderContext* pRenderContext, uint32_t resti
     if (temporalReuse)
     {
         // Adaptive ReSTIR
-        // var["gRISPathIDs"] = mRISPathIDs;
-        // var["gNonRISPathIDs"] = mNonRISPathIDs;
+        var["gAdaptiveReSTIRRetrace"] = mEnableAdaptiveTemporalReuse && !mEnableSpatialReuse;
+        var["gRISPathIDs"] = mRISPathIDs;
 
         var["temporalVbuffer"] = mpTemporalVBuffer;
         var["motionVectors"] = renderData[kInputMotionVectors]->asTexture();

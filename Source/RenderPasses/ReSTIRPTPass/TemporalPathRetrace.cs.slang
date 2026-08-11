@@ -35,6 +35,9 @@ struct PathRetracePass
     RWStructuredBuffer<PathReservoir> temporalReservoirs;
     RWStructuredBuffer<PixelReconnectionData> reconnectionDataBuffer;
 
+    Buffer<uint> gRISPathIDs;
+    bool gAdaptiveReSTIRRetrace;
+
     int  gNumSpatialRounds;
     bool gEnableTemporalReprojection;
 
@@ -141,9 +144,21 @@ struct PathRetracePass
     */
     void execute(const uint2 _pixel)
     {
-        const uint2 pixel = _pixel;
+        uint2 pixel = _pixel;
 
         if (any(pixel >= params.frameDim)) return;
+
+        // if (gAdaptiveReSTIRRetrace)
+        // {
+        //     // Only Reuse RIS candidate pixels
+        //     uint2 frameDim = gPathTracer.params.frameDim;
+        //     uint pathIDIndex = 1 + pixel.x + (pixel.y * frameDim.x);
+        //     if (pathIDIndex > gRISPathIDs[0]) return;
+
+        //     uint pathID = gRISPathIDs[pathIDIndex];
+        //     pixel.x = pathID & 0xfff;
+        //     pixel.y = pathID >> 12;
+        // }
 
         printSetPixel(pixel);
         logSetPixel(pixel);
