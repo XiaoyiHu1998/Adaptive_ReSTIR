@@ -816,7 +816,7 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
 
             if ((mEnableTemporalReuse || mEnableAdaptiveTemporalReuse) && mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
             {
-                if ((!mEnableSpatialReuse || mNumSpatialRounds % 2 == 0 || mEnableAdaptiveTemporalReuse))
+                if ((!mEnableSpatialReuse || mNumSpatialRounds % 2 == 0 || (mEnableAdaptiveTemporalReuse && !mEnableSpatialReuse)))
                     pRenderContext->copyResource(mpTemporalReservoirs[restir_i].get(), mpOutputReservoirs.get());
                 if (restir_i == numPasses - 1)
                     pRenderContext->copyResource(mpTemporalVBuffer.get(), renderData[kInputVBuffer].get());
