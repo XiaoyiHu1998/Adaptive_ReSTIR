@@ -143,10 +143,10 @@ namespace
     // Adaptive ReSTIR Naive Generation Scheme
     const Gui::DropdownList kSamplingRateRIS =
     {
-        {(uint)SamplingRateRIS::Full, "Full Rate Sampling"},
-        {(uint)SamplingRateRIS::ThreeQuarter, "ThreeQuarter Rate Sampling"},
-        {(uint)SamplingRateRIS::Half, "Half Rate Sampling"},
-        {(uint)SamplingRateRIS::Quarter, "Quarter Rate Sampling"}
+        {(uint)SamplingRateRIS::Full, "Full"},
+        {(uint)SamplingRateRIS::ThreeQuarter, "ThreeQuarter: 3/4"},
+        {(uint)SamplingRateRIS::Half, "Half: 1/2"},
+        {(uint)SamplingRateRIS::Quarter, " Quarter: 1/4"}
     };
 
     const std::string kEnableAdaptiveRIS = "enableAdaptiveRIS";
@@ -738,23 +738,19 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
                 assert(mpCounters);
                 pRenderContext->clearUAV(mpCounters->getUAV().get(), uint4(0));
 
-                if (mEnableAdaptiveRIS)
+                mpPathTracerBlock->getRootVar()["gSppId"] = restir_i;
+                mpPathTracerBlock->getRootVar()["gNumSpatialRounds"] = mNumSpatialRounds;
+                mRISPathIDs->setElement(0, 0u);
+                mNonRISPathIDs->setElement(0, 0u);
+
+                if (restir_i == 0)
                 {
-                    mpPathTracerBlock->getRootVar()["gSppId"] = restir_i;
-                    mpPathTracerBlock->getRootVar()["gNumSpatialRounds"] = mNumSpatialRounds;
-                    mRISPathIDs->setElement(0, 0u);
-                    mNonRISPathIDs->setElement(0, 0u);
-
-                    if (restir_i == 0)
-                        // Generate paths at primary hits.
-                        // generatePaths(pRenderContext, renderData, 0);
-                        generatePathsNaive(pRenderContext, renderData, 0);
-
-                    // Launch main trace pass.
-                    tracePass(pRenderContext, renderData, mpTracePass, "tracePass", 0);
+                    generatePathsNaive(pRenderContext, renderData, 0);
                 }
-            }
 
+                // Launch main trace pass.
+                tracePass(pRenderContext, renderData, mpTracePass, "tracePass", 0);
+            }
         }
 
         //Adaptive ReSTIR Temporal Reuse pass
@@ -957,8 +953,14 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
             }
         }
 
-        dirty |= widget.dropdown("Adaptive ReSTIR Naive Sampling Rate", kSamplingRateRIS, reinterpret_cast<uint32_t&>(mSamplingRateRIS));
+        // Adaptive ReSTIR
         dirty |= widget.checkbox("Adaptive RIS Naive", mEnableAdaptiveRIS);
+
+        if (mEnableAdaptiveRIS)
+        {
+            dirty |= widget.dropdown("Adaptive ReSTIR Naive Sampling Rate", kSamplingRateRIS, reinterpret_cast<uint32_t&>(mSamplingRateRIS));
+        }
+
         if (widget.checkbox("Adaptive Temporal Reuse", mEnableAdaptiveTemporalReuse))
         {
             dirty = true;
@@ -967,12 +969,12 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
 
         if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
         {
-            dirty |= widget.checkbox("Spatial Reuse", mEnableSpatialReuse);
             if (widget.checkbox("Temporal Reuse", mEnableTemporalReuse))
             {
                 dirty = true;
                 mEnableAdaptiveTemporalReuse &= !mEnableTemporalReuse;
             }
+            dirty |= widget.checkbox("Spatial Reuse", mEnableSpatialReuse);
         }
 
         if (mStaticParams.pathSamplingMode == PathSamplingMode::PathReuse)
@@ -1002,7 +1004,7 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
             }
         }
 
-        if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR && mEnableTemporalReuse)
+        if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR && (mEnableTemporalReuse || mEnableAdaptiveTemporalReuse))
         {
             if (auto group = widget.group("Temporal reuse controls", true))
             {
@@ -1686,7 +1688,7 @@ void ReSTIRPTPass::generatePathsNaive(RenderContext* pRenderContext, const Rende
     mpGeneratePathsNaive["gScene"] = mpScene->getParameterBlock();
     var["gSampleId"] = sampleId;
     var["gPatternNumber"] = mPatternNumber;
-    var["gPatterns"] = mPatterns[mSamplingRateRIS];
+    var["gPatterns"] = mPatterns[mEnableAdaptiveRIS ? mSamplingRateRIS : 0];
     var["gRISPathIDs"] = mRISPathIDs->asBuffer();
     var["gNonRISPathIDs"] = mNonRISPathIDs->asBuffer();
     var["outputReservoirs"] = mpOutputReservoirs;
