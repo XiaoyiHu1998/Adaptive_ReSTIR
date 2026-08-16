@@ -765,11 +765,6 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
                         PathRetracePass(pRenderContext, restir_i, renderData, true, 0);
                     // a separate pass to trace rays for hybrid shift/random number replay
                     PathReusePass(pRenderContext, restir_i, renderData, true, 0, !mEnableSpatialReuse);
-
-                    // Adaptive ReSTIR reprojection
-                    // TODO: move to own function and shader
-                    // TODO: Add check for enough temporal reprojections before you can reuse
-                    PathReusePass(pRenderContext, restir_i, renderData, true, 0, !mEnableSpatialReuse, true);
                 }
 
                 mValidAdaptiveHistory = mEnableAdaptiveTemporalReuse;
@@ -817,6 +812,9 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
                 if (restir_i == numPasses - 1)
                     pRenderContext->copyResource(mpTemporalVBuffer.get(), renderData[kInputVBuffer].get());
             }
+
+            if (mEnableAdaptiveRIS)
+                mPatternNumber = (mPatternNumber + 1) % 4;
         }
         mParams.seed++;
     }
@@ -1693,8 +1691,6 @@ void ReSTIRPTPass::generatePathsNaive(RenderContext* pRenderContext, const Rende
     var["gNonRISPathIDs"] = mNonRISPathIDs->asBuffer();
     var["outputReservoirs"] = mpOutputReservoirs;
 
-    mPatternNumber = (mPatternNumber + 1) % 4;
-
     // Launch one thread per pixel.
     // The dimensions are padded to whole tiles to allow re-indexing the threads in the shader.
     mpGeneratePathsNaive->execute(pRenderContext, { mParams.screenTiles.x * tileSize, mParams.screenTiles.y, 1u });
@@ -1736,7 +1732,7 @@ void ReSTIRPTPass::tracePass(RenderContext* pRenderContext, const RenderData& re
     pass->execute(pRenderContext, uint3(frameDim, 1u));
 }
 
-void ReSTIRPTPass::PathReusePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool isTemporalReuse, int spatialRoundId, bool isLastRound, bool adaptiveReproject)
+void ReSTIRPTPass::PathReusePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool isTemporalReuse, int spatialRoundId, bool isLastRound)
 {
     bool isPathReuseMISWeightComputation = spatialRoundId == -1;
 
@@ -1787,10 +1783,9 @@ void ReSTIRPTPass::PathReusePass(RenderContext* pRenderContext, uint32_t restir_
     if (isTemporalReuse)
     {
         // Adaptive ReSTIR
+        var["gPatternNumber"] = mPatternNumber;
+        var["gPatterns"] = mPatterns[mEnableAdaptiveRIS ? mSamplingRateRIS : 0];
         var["gAdaptiveReSTIRReuse"] = mEnableAdaptiveTemporalReuse;
-        var["gAdaptiveReSTIRReproject"] = adaptiveReproject;
-        var["gRISPathIDs"] = mRISPathIDs;
-        var["gNonRISPathIDs"] = mNonRISPathIDs;
 
         var["temporalVbuffer"] = mpTemporalVBuffer;
         var["motionVectors"] = renderData[kInputMotionVectors]->asTexture();
@@ -1879,10 +1874,6 @@ void ReSTIRPTPass::PathRetracePass(RenderContext* pRenderContext, uint32_t resti
 
     if (temporalReuse)
     {
-        // Adaptive ReSTIR
-        var["gAdaptiveReSTIRRetrace"] = mEnableAdaptiveTemporalReuse && !mEnableSpatialReuse;
-        var["gRISPathIDs"] = mRISPathIDs;
-
         var["temporalVbuffer"] = mpTemporalVBuffer;
         var["motionVectors"] = renderData[kInputMotionVectors]->asTexture();
         var["gEnableTemporalReprojection"] = mEnableTemporalReprojection;

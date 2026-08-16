@@ -52,7 +52,6 @@ struct PathGenerator
     RWStructuredBuffer<PathReservoir> outputReservoirs; // reservoir for next pass
 
     int gSampleId;
-    // uint gSamplingRateRIS; // Shading rates : [0: full, 1: three - quarters, 2: half, 3: quarter]
     uint gPatternNumber; // Determine which pattern frame
     uint gPatterns; // Uint encoded with all pixel states for generation patterns across 4 frames in the 16 least significant bits
 
@@ -120,23 +119,23 @@ struct PathGenerator
             }
 
             // Write pathID to gNonRISPathIDs buffer for each non-RIS candidate pixel using prefix sum
-            bool NonRISPixel = !RISPixel;
-            prefixSum = WavePrefixCountBits(NonRISPixel);
-            generateCount = WaveActiveCountBits(NonRISPixel);
+            // bool NonRISPixel = !RISPixel;
+            // prefixSum = WavePrefixCountBits(NonRISPixel);
+            // generateCount = WaveActiveCountBits(NonRISPixel);
 
-            bufferOffset;
-            if (WaveIsFirstLane())
-            {
-                InterlockedAdd(gNonRISPathIDs[0], generateCount, bufferOffset); // TODO: Remember to reset to 0 later
-            }
-            bufferOffset = WaveReadLaneFirst(bufferOffset) + 1;
-            bufferOffset += prefixSum;
+            // bufferOffset;
+            // if (WaveIsFirstLane())
+            // {
+            //     InterlockedAdd(gNonRISPathIDs[0], generateCount, bufferOffset); // TODO: Remember to reset to 0 later
+            // }
+            // bufferOffset = WaveReadLaneFirst(bufferOffset) + 1;
+            // bufferOffset += prefixSum;
 
-            GroupMemoryBarrierWithGroupSync();
-            if (NonRISPixel)
-            {
-                gNonRISPathIDs[bufferOffset] = (pixel.y << 12) | pixel.x;
-            }
+            // GroupMemoryBarrierWithGroupSync();
+            // if (NonRISPixel)
+            // {
+            //     gNonRISPathIDs[bufferOffset] = (pixel.y << 12) | pixel.x;
+            // }
         }
     }
 

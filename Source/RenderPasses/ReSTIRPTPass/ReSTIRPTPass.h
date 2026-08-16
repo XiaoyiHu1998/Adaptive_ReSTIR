@@ -77,7 +77,7 @@ private:
     void generatePaths(RenderContext* pRenderContext, const RenderData& renderData, int sampleId = 0);
     void generatePathsNaive(RenderContext* pRenderContext, const RenderData& renderData, int sampleId = 0);
     void tracePass(RenderContext* pRenderContext, const RenderData& renderData, const ComputePass::SharedPtr& pass, const std::string& passName, int sampleId);
-    void PathReusePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool temporalReuse = false, int spatialRoundId = 0, bool isLastRound = false, bool adaptiveReproject = false);
+    void PathReusePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool temporalReuse = false, int spatialRoundId = 0, bool isLastRound = false);
     void PathRetracePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool temporalReuse = false, int spatialRoundId = 0);
     Texture::SharedPtr createNeighborOffsetTexture(uint32_t sampleCount);
 
