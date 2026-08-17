@@ -345,9 +345,7 @@ struct PathReusePass
         if (any(pixel >= params.frameDim)) return;
 
         uint2 mortonPixel = pixel;
-        mortonPixel.x %= 4;
-        mortonPixel.y %= 4;
-        uint mortonIdx = interleave_16bit(mortonPixel);
+        uint mortonIdx = interleave_16bit(mortonPixel) % 16;
         uint patternMask = 1 << (15 - mortonIdx);
         bool reproject = ((gGenerationPattern >> gPatternShift) & patternMask) == 0;
 
