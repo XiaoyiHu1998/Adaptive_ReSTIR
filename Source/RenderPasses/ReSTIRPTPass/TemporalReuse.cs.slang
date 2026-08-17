@@ -44,9 +44,10 @@ struct PathReusePass
     float gTemporalHistoryLength;
     bool gNoResamplingForTemporalReuse;
 
-    uint gPatternNumber; // Determine which pattern frame
-    uint gPatterns;      // Uint encoded with all pixel states for generation patterns across 4 frames in the 16 least significant bits
+    uint gPatternShift;      // Amount of bits to shift right to access the right RIS candidate pattern for current frame
+    uint gGenerationPattern; // uint encoding for which pixels are RIS candidates within a 4x4 grid, contains patterns for two subsequent frames
     bool gAdaptiveReSTIRReuse;
+    float gAdaptiveTemporalHistoryCap;
 
     bool isValidPackedHitInfo(PackedHitInfo packed)
     {
@@ -147,7 +148,7 @@ struct PathReusePass
             PathReservoir temporalReservoir = temporalReservoirs[params.getReservoirOffset(prevPixel)];
 
             if (reproject)
-                temporalReservoir.M = min(4.f, temporalReservoir.M);
+                temporalReservoir.M = min(gAdaptiveTemporalHistoryCap, temporalReservoir.M);
             else
                 temporalReservoir.M = min(gTemporalHistoryLength * currentM, temporalReservoir.M);
 
@@ -343,9 +344,13 @@ struct PathReusePass
 
         if (any(pixel >= params.frameDim)) return;
 
-        uint mortonIdx = (pixel.x % 2 + (pixel.y % 2) * 2) % 4;                            // pixel index in 2x2 morton-order grid
-        uint patternsMask = (1 << (3 - mortonIdx)) << ((3 - gPatternNumber) * 4); // mask used to select pixel from patterns
-        bool reproject = (gPatterns & patternsMask) == 0;
+        uint2 mortonPixel = pixel;
+        mortonPixel.x %= 4;
+        mortonPixel.y %= 4;
+        uint mortonIdx = interleave_16bit(mortonPixel);
+        uint patternMask = 1 << (15 - mortonIdx);
+        bool reproject = ((gGenerationPattern >> gPatternShift) & patternMask) == 0;
+
         printSetPixel(pixel);
         logSetPixel(pixel);
 

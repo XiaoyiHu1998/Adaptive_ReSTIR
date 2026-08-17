@@ -52,8 +52,8 @@ struct PathGenerator
     RWStructuredBuffer<PathReservoir> outputReservoirs; // reservoir for next pass
 
     int gSampleId;
-    uint gPatternNumber; // Determine which pattern frame
-    uint gPatterns; // Uint encoded with all pixel states for generation patterns across 4 frames in the 16 least significant bits
+    uint gPatternShift; // Amount of bits to shift right to access the right RIS candidate pattern for current frame
+    uint gGenerationPattern; // uint encoding for which pixels are RIS candidates within a 4x4 grid, contains patterns for two subsequent frames
 
     // Render settings that depend on the scene.
     // TODO: Move into scene defines.
@@ -95,12 +95,17 @@ struct PathGenerator
                 return;
             }
 
-            // Determine if RIS candidate needs to be generated
-            uint mortonIdx = threadIdx % 4;                                        // pixel index in 2x2 morton-order grid
-            uint patternsMask = (1 << (3 - mortonIdx)) << ((3 - gPatternNumber) * 4); // mask used to select pixel from patterns
+            // // Determine if RIS candidate needs to be generated 2x2 grid
+            // uint mortonIdx = threadIdx % 4;                                        // pixel index in 2x2 morton-order grid
+            // uint patternsMask = (1 << (3 - mortonIdx)) << ((3 - gPatternNumber) * 4); // mask used to select pixel from patterns
+            // bool RISPixel = (gPatterns & patternsMask) != 0;
+
+            // // Determine if RIS candidate needs to be generated 4x4 grid
+            uint mortonIdx = threadIdx % 16; // pixel index in 4x4 morton-order grid
+            uint patternMask = 1 << (15 - mortonIdx);
+            bool RISPixel = ((gGenerationPattern >> gPatternShift) & patternMask) != 0;
 
             // Write pathID to gRISPathIDs buffer for each RIS candidate pixel using prefix sum
-            bool RISPixel = (gPatterns & patternsMask) != 0;
             uint prefixSum = WavePrefixCountBits(RISPixel);
             uint generateCount = WaveActiveCountBits(RISPixel);
 
@@ -111,7 +116,6 @@ struct PathGenerator
             }
             bufferOffset = WaveReadLaneFirst(bufferOffset) + 1;
             bufferOffset += prefixSum;
-
             GroupMemoryBarrierWithGroupSync();
             if (RISPixel)
             {

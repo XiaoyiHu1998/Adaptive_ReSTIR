@@ -146,7 +146,9 @@ namespace
         {(uint)SamplingRateRIS::Full, "Full"},
         {(uint)SamplingRateRIS::ThreeQuarter, "ThreeQuarter: 3/4"},
         {(uint)SamplingRateRIS::Half, "Half: 1/2"},
-        {(uint)SamplingRateRIS::Quarter, " Quarter: 1/4"}
+        {(uint)SamplingRateRIS::Quarter, "Quarter: 1/4"},
+        {(uint)SamplingRateRIS::OneEigth, "OneEigth: 1/8"},
+        {(uint)SamplingRateRIS::OneSixteenth, "OneSixteenth: 1/16"}
     };
 
     const std::string kEnableAdaptiveRIS = "enableAdaptiveRIS";
@@ -812,9 +814,6 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
                 if (restir_i == numPasses - 1)
                     pRenderContext->copyResource(mpTemporalVBuffer.get(), renderData[kInputVBuffer].get());
             }
-
-            if (mEnableAdaptiveRIS)
-                mPatternNumber = (mPatternNumber + 1) % 4;
         }
         mParams.seed++;
     }
@@ -1007,6 +1006,7 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
             if (auto group = widget.group("Temporal reuse controls", true))
             {
                 dirty |= widget.var("Temporal History Length", mTemporalHistoryLength, 0, 100);
+                dirty |= widget.var("Adaptive Temporal History Length", mAdaptiveTemporalHistoryCap, 0.0f, 100.0f);
                 dirty |= widget.checkbox("Use M capping", mUseMaxHistory);
                 dirty |= widget.checkbox("Temporal Reprojection", mEnableTemporalReprojection);
                 dirty |= widget.checkbox("Temporal Update for Dynamic Scenes", mStaticParams.temporalUpdateForDynamicScene);
@@ -1685,8 +1685,8 @@ void ReSTIRPTPass::generatePathsNaive(RenderContext* pRenderContext, const Rende
 
     mpGeneratePathsNaive["gScene"] = mpScene->getParameterBlock();
     var["gSampleId"] = sampleId;
-    var["gPatternNumber"] = mPatternNumber;
-    var["gPatterns"] = mPatterns[mEnableAdaptiveRIS ? mSamplingRateRIS : 0];
+    var["gPatternShift"] = ((mReservoirFrameCount % 16) % 2) ? 0 : 16;
+    var["gGenerationPattern"] = mPatterns[mEnableAdaptiveRIS ? mSamplingRateRIS : 0][(mReservoirFrameCount % 16) / 2];
     var["gRISPathIDs"] = mRISPathIDs->asBuffer();
     var["gNonRISPathIDs"] = mNonRISPathIDs->asBuffer();
     var["outputReservoirs"] = mpOutputReservoirs;
@@ -1783,9 +1783,10 @@ void ReSTIRPTPass::PathReusePass(RenderContext* pRenderContext, uint32_t restir_
     if (isTemporalReuse)
     {
         // Adaptive ReSTIR
-        var["gPatternNumber"] = mPatternNumber;
-        var["gPatterns"] = mPatterns[mEnableAdaptiveRIS ? mSamplingRateRIS : 0];
+        var["gPatternShift"] = ((mReservoirFrameCount % 16) % 2) ? 0 : 16;
+        var["gGenerationPattern"] = mPatterns[mEnableAdaptiveRIS ? mSamplingRateRIS : 0][(mReservoirFrameCount % 16) / 2];
         var["gAdaptiveReSTIRReuse"] = mEnableAdaptiveTemporalReuse;
+        var["gAdaptiveTemporalHistoryCap"] = mAdaptiveTemporalHistoryCap;
 
         var["temporalVbuffer"] = mpTemporalVBuffer;
         var["motionVectors"] = renderData[kInputMotionVectors]->asTexture();

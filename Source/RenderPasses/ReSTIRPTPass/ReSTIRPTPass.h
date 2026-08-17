@@ -26,7 +26,9 @@ namespace Falcor
         Full,
         ThreeQuarter,
         Half,
-        Quarter
+        Quarter,
+        OneEigth,
+        OneSixteenth
     };
 }
 
@@ -204,20 +206,27 @@ private:
 
 
     bool mResetRenderPassFlags = false;
-    
-    // Adaptive ReSTIR
-    // Temporal Reuse
-    bool mEnableAdaptiveTemporalReuse = true;
-    bool mValidAdaptiveHistory = false;
+
     // RIS Path Generation
     bool mEnableAdaptiveRIS = true;
-    uint mPatterns[4] = {0xFFFFU, 0x7BDEU, 0x9696U, 0x8421U};
-    uint mPatternNumber = 0;
     uint mSamplingRateRIS = 3;
+    uint mPatterns[6][8] = { //4x4 grid generation patterns
+        {0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU}, // Full
+        {0x7777BBBBU, 0xDDDDEEEEU, 0x7777BBBBU, 0xDDDDEEEEU, 0x7777BBBBU, 0xDDDDEEEEU, 0x7777BBBBU, 0xDDDDEEEEU}, // 3/4
+        {0x99996666U, 0x99996666U, 0x99996666U, 0x99996666U, 0x99996666U, 0x99996666U, 0x99996666U, 0x99996666U}, // 1/2
+        {0x88884444U, 0x22221111U, 0x88884444U, 0x22221111U, 0x88884444U, 0x22221111U, 0x88884444U, 0x22221111U}, // 1/4
+        {0x80084004U, 0x20021001U, 0x08800440U, 0x02200110U, 0x80084004U, 0x20021001U, 0x08800440U, 0x02200110U}, // 1/8
+        {0x80004000U, 0x20001000U, 0x08000400U, 0x02000100U, 0x00800040U, 0x00200010U, 0x00080004U, 0x00020001U}  // 1/16
+    };
     std::vector<uint> mRISPathIDsData = std::vector<uint>(3840 * 2160, 0u);
     std::vector<uint> mNonRISPathIDsData = std::vector<uint>(3840 * 2160, 0u);
     Buffer::SharedPtr mRISPathIDs = Buffer::create(mRISPathIDsData.size() * sizeof(uint), ResourceBindFlags::UnorderedAccess, Buffer::CpuAccess::Read, mRISPathIDsData.data());
     Buffer::SharedPtr mNonRISPathIDs = Buffer::create(mNonRISPathIDsData.size() * sizeof(uint), ResourceBindFlags::UnorderedAccess, Buffer::CpuAccess::Read, mNonRISPathIDsData.data());
+
+    // Adaptive Temporal Reuse
+    bool mEnableAdaptiveTemporalReuse = true;
+    bool mValidAdaptiveHistory = false;
+    float mAdaptiveTemporalHistoryCap = 16.0f;
 
     ComputePass::SharedPtr          mpSpatialReusePass;      ///< Merges reservoirs.
     ComputePass::SharedPtr          mpTemporalReusePass;      ///< Merges reservoirs.
