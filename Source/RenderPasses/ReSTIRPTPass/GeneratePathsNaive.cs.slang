@@ -95,11 +95,6 @@ struct PathGenerator
                 return;
             }
 
-            // // Determine if RIS candidate needs to be generated 2x2 grid
-            // uint mortonIdx = threadIdx % 4;                                        // pixel index in 2x2 morton-order grid
-            // uint patternsMask = (1 << (3 - mortonIdx)) << ((3 - gPatternNumber) * 4); // mask used to select pixel from patterns
-            // bool RISPixel = (gPatterns & patternsMask) != 0;
-
             // // Determine if RIS candidate needs to be generated 4x4 grid
             uint mortonIdx = threadIdx % 16; // pixel index in 4x4 morton-order grid
             uint patternMask = 1 << (15 - mortonIdx);
