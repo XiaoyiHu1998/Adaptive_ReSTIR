@@ -538,6 +538,35 @@ struct PathReusePass
             temporalReservoirs[centralOffset] = dstReservoir;
 
         if (any(isnan(color) || isinf(color) || color < 0.f)) color = 0.f;
+
+        // Adaptive ReSTIR per pixel Debug
+        if (color.r + color.b + color.g < 0.0001f)
+        {
+            // color.g = 100000.0f;
+        }
+
+        if (dstReservoir.M <= 5.f) // Debug
+        {
+            color.b = 100000.0f;
+        }
+        else if (dstReservoir.M <= 10.f)
+        {
+            color.g = 0.5f;
+            color.b = 0.5f;
+        }
+        else if (dstReservoir.M <= 15.f)
+        {
+            color.g = 0.15f;
+            color.b = 0.15f;
+        }
+        // float distanceCurrent = length(abs(centralPrimarySd.posW - gScene.camera.getPosition(false)));
+        // float distancePrev = length(abs(temporalPrimarySd.posW - gScene.camera.getPosition(false)));
+        // bool disoccluded = false;
+        // if (disoccluded || !isValidScreenRegion(prevPixel)) // Debug
+        // {
+        //     color.r = 100000.0f;
+        // }
+
         if (gIsLastRound)
         {
             if (useDirectLighting)

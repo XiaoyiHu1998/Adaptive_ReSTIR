@@ -78,8 +78,9 @@ private:
     void endFrame(RenderContext* pRenderContext, const RenderData& renderData);
     void generatePaths(RenderContext* pRenderContext, const RenderData& renderData, int sampleId = 0);
     void generatePathsNaive(RenderContext* pRenderContext, const RenderData& renderData, int sampleId = 0);
+    void generatePathsPerPixel(RenderContext* pRenderContext, const RenderData& renderData, int sampleId = 0);
     void tracePass(RenderContext* pRenderContext, const RenderData& renderData, const ComputePass::SharedPtr& pass, const std::string& passName, int sampleId);
-    void PathReusePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool temporalReuse = false, int spatialRoundId = 0, bool isLastRound = false);
+    void PathReusePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool temporalReuse = false, int spatialRoundId = 0, bool isLastRound = false, bool temporalReproject = false);
     void PathRetracePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool temporalReuse = false, int spatialRoundId = 0);
     Texture::SharedPtr createNeighborOffsetTexture(uint32_t sampleCount);
 
@@ -207,8 +208,9 @@ private:
 
     bool mResetRenderPassFlags = false;
 
-    // RIS Path Generation
-    bool mEnableAdaptiveRIS = true;
+    // Adaptive RIS Path Generation
+    bool mEnableAdaptiveRISNaive = true;
+    bool mEnableAdaptiveRISPerPixel = false;
     uint mSamplingRateRIS = 3;
     uint mPatterns[6][8] = { //4x4 grid generation patterns
         {0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU}, // Full
@@ -226,7 +228,8 @@ private:
     // Adaptive Temporal Reuse
     bool mEnableAdaptiveTemporalReuse = true;
     bool mValidAdaptiveHistory = false;
-    float mAdaptiveTemporalHistoryCap = 16.0f;
+    float mAdaptiveTemporalHistoryCap = 22.0f;
+    float mAdaptiveMinPerPixelRISRate = 0.025f;
 
     ComputePass::SharedPtr          mpSpatialReusePass;      ///< Merges reservoirs.
     ComputePass::SharedPtr          mpTemporalReusePass;      ///< Merges reservoirs.
@@ -237,6 +240,7 @@ private:
 
     ComputePass::SharedPtr          mpGeneratePaths;                ///< Fullscreen compute pass generating paths starting at primary hits.
     ComputePass::SharedPtr          mpGeneratePathsNaive;           ///< Fullscreen compute pass generating paths starting at primary hits.
+    ComputePass::SharedPtr          mpGeneratePathsPerPixel;        ///< Fullscreen compute pass generating paths starting at primary hits.
     ComputePass::SharedPtr          mpTracePass;                    ///< Main tracing pass.
 
     ComputePass::SharedPtr          mpReflectTypes;             ///< Helper for reflecting structured buffer types.

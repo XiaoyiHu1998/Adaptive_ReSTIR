@@ -28,6 +28,7 @@
 import Scene.Scene;
 import Utils.Attributes;
 import Utils.Color.ColorHelpers;
+import Utils.Sampling.TinyUniformSampleGenerator;
 import Rendering.Lights.EnvMapSampler;
 import Rendering.Materials.StandardMaterial;
 import Rendering.Materials.ClothMaterial;
@@ -46,20 +47,50 @@ struct PathGenerator
     // Resources
     RestirPathTracerParams params; ///< Runtime parameters.
     Texture2D<PackedHitInfo> vbuffer; ///< Fullscreen V-buffer for the primary hits.
-    RWTexture2D<float4> outputColor;  ///< Output color buffer if kSamplesPerPixel == 1.
-    RWStructuredBuffer<PathReservoir> outputReservoirs; // reservoir for next pass
-    
+    Texture2D<PackedHitInfo> temporalVbuffer;
+    Texture2D<float2> motionVectors;
+    RWTexture2D<float4> outputColor; ///< Output color buffer if kSamplesPerPixel == 1.
+
+    RWStructuredBuffer<PathReservoir> outputReservoirs;   // reservoir for next pass
+    RWStructuredBuffer<PathReservoir> temporalReservoirs; // reservoir from previous frame
+
     RWBuffer<uint> gRISPathIDs;
     RWBuffer<uint> gNonRISPathIDs;
 
     int gSampleId;
-    uint gPatternShift; // Amount of bits to shift right to access the right RIS candidate pattern for current frame
-    uint gGenerationPattern; // uint encoding for which pixels are RIS candidates within a 4x4 grid, contains patterns for two subsequent frames
+    bool gEnableTemporalReprojection;
+    float gAdaptiveTemporalHistoryCap;
+    float gAdaptiveMinPerPixelRISRate;
 
     // Render settings that depend on the scene.
     // TODO: Move into scene defines.
     // static bool kUseEnvBackground = USE_ENV_BACKGROUND;
     bool kUseEnvBackground;
+
+    bool isValidPackedHitInfo(PackedHitInfo packed)
+    {
+        return packed.x != 0;
+    }
+
+    bool isValidScreenRegion(int2 pixel) { return all(pixel >= 0 && pixel < params.frameDim); }
+
+    ShadingData getPixelTemporalShadingData(int2 pixel, out PackedHitInfo PrimaryHitPacked)
+    {
+        ShadingData sd = {};
+        Ray ray = gScene.camera.computeRayPinholePrevFrame(pixel, params.frameDim);
+        PrimaryHitPacked = temporalVbuffer[pixel];
+        if (isValidPackedHitInfo(PrimaryHitPacked))
+        {
+            HitInfo PrimaryHit; PrimaryHit.unpack(PrimaryHitPacked);
+            sd = loadShadingData(PrimaryHit, -ray.dir, true);
+        }
+        return sd;
+    }
+
+    float easingFunction(float x)
+    {
+        return x * x * x * x * x;
+    }
 
     // Entrypoint
     void execute(const uint2 tileID, const uint threadIdx)
@@ -96,10 +127,34 @@ struct PathGenerator
                 return;
             }
 
-            // Determine if RIS candidate needs to be generated 4x4 grid
-            uint mortonIdx = threadIdx % 16; // pixel index in 4x4 morton-order grid
-            uint patternMask = 1 << (15 - mortonIdx);
-            bool RISPixel = ((gGenerationPattern >> gPatternShift) & patternMask) != 0;
+            // Determine if current pixel needs to generate new RIS candidate based on chance
+            PathReservoir temporalReservoir;
+            bool validTemporalReservoir = true;
+            var sg = TinyUniformSampleGenerator(pixel, (kCandidateSamples + 1 + 1) * params.seed + kCandidateSamples);
+            { 
+                float2 motionVector = motionVectors[pixel];
+                int2 prevPixel = pixel;
+
+                bool foundTemporalSurface = true;
+
+                if (gEnableTemporalReprojection)
+                {
+                    prevPixel = pixel + motionVector * params.frameDim + (sampleNext2D(sg) * 1.f - 0.f);
+                }
+
+                if (!isValidScreenRegion(prevPixel) || !foundTemporalSurface) { validTemporalReservoir = false; }
+
+                PackedHitInfo temporalPrimaryHitPacked;
+                ShadingData temporalPrimarySd = getPixelTemporalShadingData(prevPixel, temporalPrimaryHitPacked);
+                if (!isValidPackedHitInfo(temporalPrimaryHitPacked)) { validTemporalReservoir = false; }
+
+                // bool doTemporalUpdateForDynamicScene = kTemporalUpdateForDynamicScene; // Doesn't seem to be necessary
+
+                temporalReservoir = temporalReservoirs[params.getReservoirOffset(prevPixel)];
+            }
+
+            float candidateChance = 1.f - easingFunction(min(gAdaptiveTemporalHistoryCap, temporalReservoir.M) / gAdaptiveTemporalHistoryCap);
+            bool RISPixel = sampleNext1D(sg) <= max(gAdaptiveMinPerPixelRISRate, candidateChance) || !validTemporalReservoir;
 
             // Write pathID to gRISPathIDs buffer for each RIS candidate pixel using prefix sum
             uint prefixSum = WavePrefixCountBits(RISPixel);
@@ -119,23 +174,23 @@ struct PathGenerator
             }
 
             // Write pathID to gNonRISPathIDs buffer for each non-RIS candidate pixel using prefix sum
-            // bool NonRISPixel = !RISPixel;
-            // prefixSum = WavePrefixCountBits(NonRISPixel);
-            // generateCount = WaveActiveCountBits(NonRISPixel);
+            bool NonRISPixel = !RISPixel;
+            prefixSum = WavePrefixCountBits(NonRISPixel);
+            generateCount = WaveActiveCountBits(NonRISPixel);
 
-            // bufferOffset;
-            // if (WaveIsFirstLane())
-            // {
-            //     InterlockedAdd(gNonRISPathIDs[0], generateCount, bufferOffset); // TODO: Remember to reset to 0 later
-            // }
-            // bufferOffset = WaveReadLaneFirst(bufferOffset) + 1;
-            // bufferOffset += prefixSum;
+            bufferOffset;
+            if (WaveIsFirstLane())
+            {
+                InterlockedAdd(gNonRISPathIDs[0], generateCount, bufferOffset); // TODO: Remember to reset to 0 later
+            }
+            bufferOffset = WaveReadLaneFirst(bufferOffset) + 1;
+            bufferOffset += prefixSum;
 
-            // GroupMemoryBarrierWithGroupSync();
-            // if (NonRISPixel)
-            // {
-            //     gNonRISPathIDs[bufferOffset] = (pixel.y << 12) | pixel.x;
-            // }
+            GroupMemoryBarrierWithGroupSync();
+            if (NonRISPixel)
+            {
+                gNonRISPathIDs[bufferOffset] = (pixel.y << 12) | pixel.x;
+            }
         }
     }
 

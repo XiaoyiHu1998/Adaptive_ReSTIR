@@ -44,9 +44,17 @@ struct PathReusePass
     float gTemporalHistoryLength;
     bool gNoResamplingForTemporalReuse;
 
+    // Adaptive ReSTIR
+    Buffer<uint> gRISPathIDs;
+    Buffer<uint> gNonRISPathIDs;
+
     uint gPatternShift;      // Amount of bits to shift right to access the right RIS candidate pattern for current frame
     uint gGenerationPattern; // uint encoding for which pixels are RIS candidates within a 4x4 grid, contains patterns for two subsequent frames
-    bool gAdaptiveReSTIRReuse;
+
+    bool gUsePathIDBuffers;
+    bool gReprojectionPass;
+
+    bool gAdaptiveTemporalReuse;
     float gAdaptiveTemporalHistoryCap;
 
     bool isValidPackedHitInfo(PackedHitInfo packed)
@@ -137,7 +145,14 @@ struct PathReusePass
                 prevPixel = pixel + motionVector * params.frameDim + (sampleNext2D(sg) * 1.f - 0.f);
             }
 
-            if (!isValidScreenRegion(prevPixel) || !foundTemporalSurface) return;
+            if (!isValidScreenRegion(prevPixel) || !foundTemporalSurface)
+            {
+                float3 color = float3(0.f);
+                color.r = 100000.0f;
+                outputColor[pixel] = float4(color / kSamplesPerPixel, 1.f);
+                
+                return;
+            }
 
             PackedHitInfo temporalPrimaryHitPacked;
             ShadingData temporalPrimarySd = getPixelTemporalShadingData(prevPixel, temporalPrimaryHitPacked);
@@ -151,6 +166,9 @@ struct PathReusePass
                 temporalReservoir.M = min(gAdaptiveTemporalHistoryCap, temporalReservoir.M);
             else
                 temporalReservoir.M = min(gTemporalHistoryLength * currentM, temporalReservoir.M);
+
+            // if (!reproject)
+            //     temporalReservoir.M = min(gTemporalHistoryLength * currentM, temporalReservoir.M);
 
             float dstJacobian;
 
@@ -318,9 +336,41 @@ struct PathReusePass
             }
 // #endregion
 
+            // float3 confidenceWeightColor = float3(dstReservoir.M, dstReservoir.M, dstReservoir.M) / gAdaptiveTemporalHistoryCap;
+
             if (dstReservoir.weight < 0.f || isinf(dstReservoir.weight) || isnan(dstReservoir.weight)) dstReservoir.weight = 0.f;
             outputReservoirs[centralOffset] = dstReservoir;
             color = dstReservoir.F * dstReservoir.weight;
+
+            // Write pixels with disocclusion and incorrect shift mapping or no contribution into a buffer for per pixel path generator
+            if (color.r + color.b + color.g < 0.0001f)
+            {
+                // color.g = 100000.0f;
+            }
+
+            if (dstReservoir.M <= 5.f) // Debug
+            {
+                color.b = 100000.0f;
+            }
+            else if (dstReservoir.M <= 10.f)
+            {
+                color.g = 0.5f;
+                color.b = 0.5f;
+            }
+            else if (dstReservoir.M <= 15.f)
+            {
+                color.g = 0.15f;
+                color.b = 0.15f;
+            }
+            float distanceCurrent = length(abs(centralPrimarySd.posW - gScene.camera.getPosition(false)));
+            float distancePrev = length(abs(temporalPrimarySd.posW - gScene.camera.getPosition(false)));
+            bool disoccluded = distanceCurrent / distancePrev > 1.01f;
+            if (disoccluded || !isValidScreenRegion(prevPixel)) // Debug
+            {
+                color.r = 100000.0f;
+            }
+
+            // color.r = dstReservoir.M / gAdaptiveTemporalHistoryCap;
 
             if (gIsLastRound)
             {
@@ -347,11 +397,38 @@ struct PathReusePass
         printSetPixel(pixel);
         logSetPixel(pixel);
 
-        uint mortonIdx = interleave_16bit(pixel) % 16;
-        uint patternMask = 1 << (15 - mortonIdx);
-        bool reproject = ((gGenerationPattern >> gPatternShift) & patternMask) == 0;
+        if (!gUsePathIDBuffers)
+        {
+            uint mortonIdx = interleave_16bit(pixel) % 16;
+            uint patternMask = 1 << (15 - mortonIdx);
+            bool reproject = ((gGenerationPattern >> gPatternShift) & patternMask) == 0;
+            ReSTIR(pixel, reproject && gAdaptiveTemporalReuse);
 
-        ReSTIR(pixel, reproject && gAdaptiveReSTIRReuse);
+            return;
+        }
+
+        uint2 frameDim = gPathTracer.params.frameDim;
+        uint pathIDIndex = 1 + pixel.x + (pixel.y * frameDim.x);
+        if (gReprojectionPass)
+        {
+            if (pathIDIndex > gRISPathIDs[0]) return;
+
+            uint pathID = gRISPathIDs[pathIDIndex];
+            pixel.x = pathID & 0xfff;
+            pixel.y = pathID >> 12;
+
+            ReSTIR(pixel, false);
+        }
+        else
+        {
+            if (pathIDIndex > gNonRISPathIDs[0]) return;
+
+            uint pathID = gNonRISPathIDs[pathIDIndex];
+            pixel.x = pathID & 0xfff;
+            pixel.y = pathID >> 12;
+
+            ReSTIR(pixel, true);
+        }
     }
 };
 
