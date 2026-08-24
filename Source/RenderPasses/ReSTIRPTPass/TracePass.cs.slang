@@ -73,7 +73,7 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 
     PathReservoir giReservoir;
 
-    uint itersPerShaderPass = PathSamplingMode(kPathSamplingMode) == PathSamplingMode::PathTracing ? kSamplesPerPixel : sampleCount;
+    uint itersPerShaderPass = PathSamplingMode(kPathSamplingMode) == PathSamplingMode::PathTracing ? kSamplesPerPixel : max(1U, sampleCount);
 
     if (itersPerShaderPass == 1)
     {

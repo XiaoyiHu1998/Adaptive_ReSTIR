@@ -972,7 +972,7 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
 
         if (mEnableAdaptiveRISNaive)
         {
-            dirty |= widget.dropdown("Adaptive ReSTIR Naive Sampling Rate", kSamplingRateRIS, reinterpret_cast<uint32_t&>(mSamplingRateRIS));
+            dirty |= widget.dropdown("Sampling Rate", kSamplingRateRIS, reinterpret_cast<uint32_t&>(mSamplingRateRIS));
         }
 
         if (widget.checkbox("Adaptive RIS Per Pixel", mEnableAdaptiveRISPerPixel))
@@ -983,7 +983,8 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
 
         if (mEnableAdaptiveRISPerPixel)
         {
-            dirty |= widget.var("Minimum Candidate Chance", mAdaptiveMinPerPixelRISRate);
+            dirty |= widget.var("Min Chance", mAdaptiveMinPerPixelRISRate);
+            dirty |= widget.var("Max Chance", mAdaptiveMaxPerPixelRISRate);
         }
 
         if (widget.checkbox("Adaptive Temporal Reuse", mEnableAdaptiveTemporalReuse))
@@ -992,9 +993,14 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
             mEnableTemporalReuse &= !mEnableAdaptiveTemporalReuse;
         }
 
+        if (mEnableAdaptiveTemporalReuse)
+        {
+                dirty |= widget.var("Adaptive Temporal History Cap", mAdaptiveTemporalHistoryCap, 0.0f, 100.0f);
+        }
+
         if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
         {
-            if (widget.checkbox("Temporal Reuse", mEnableTemporalReuse))
+            if (widget.checkbox("Temporal Reuse (Incompatible with Adaptive RIS)", mEnableTemporalReuse))
             {
                 dirty = true;
                 mEnableAdaptiveTemporalReuse &= !mEnableTemporalReuse;
@@ -1034,7 +1040,6 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
             if (auto group = widget.group("Temporal reuse controls", true))
             {
                 dirty |= widget.var("Temporal History Length", mTemporalHistoryLength, 0, 100);
-                dirty |= widget.var("Adaptive Temporal History Length", mAdaptiveTemporalHistoryCap, 0.0f, 100.0f);
                 dirty |= widget.checkbox("Use M capping", mUseMaxHistory);
                 dirty |= widget.checkbox("Temporal Reprojection", mEnableTemporalReprojection);
                 dirty |= widget.checkbox("Temporal Update for Dynamic Scenes", mStaticParams.temporalUpdateForDynamicScene);
@@ -1758,6 +1763,7 @@ void ReSTIRPTPass::generatePathsPerPixel(RenderContext* pRenderContext, const Re
     var["gEnableTemporalReprojection"] = mEnableTemporalReprojection;
     var["gAdaptiveTemporalHistoryCap"] = mAdaptiveTemporalHistoryCap;
     var["gAdaptiveMinPerPixelRISRate"] = mAdaptiveMinPerPixelRISRate;
+    var["gAdaptiveMaxPerPixelRISRate"] = mAdaptiveMaxPerPixelRISRate;
 
     // Launch one thread per pixel.
     // The dimensions are padded to whole tiles to allow re-indexing the threads in the shader.

@@ -61,6 +61,7 @@ struct PathGenerator
     bool gEnableTemporalReprojection;
     float gAdaptiveTemporalHistoryCap;
     float gAdaptiveMinPerPixelRISRate;
+    float gAdaptiveMaxPerPixelRISRate;
 
     // Render settings that depend on the scene.
     // TODO: Move into scene defines.
@@ -200,7 +201,7 @@ struct PathGenerator
 
             // candidateChance / 1.0f gives the amount of guaranteed new samples and candidateChance % 1.0f gives chance of an additional sample
             uint sampleCount = uint(candidateChance / 1.f);
-            candidateChance = max(gAdaptiveMinPerPixelRISRate, candidateChance % 1.0f);
+            candidateChance = min(gAdaptiveMaxPerPixelRISRate, max(gAdaptiveMinPerPixelRISRate, candidateChance % 1.0f));
             if (sampleNext1D(sg) <= candidateChance || !validTemporalReservoir || disoccluded || incorrectReprojection)
                 sampleCount++;
 

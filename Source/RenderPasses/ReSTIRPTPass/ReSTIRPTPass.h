@@ -209,8 +209,8 @@ private:
     bool mResetRenderPassFlags = false;
 
     // Adaptive RIS Path Generation
+    // Naive
     bool mEnableAdaptiveRISNaive = true;
-    bool mEnableAdaptiveRISPerPixel = false;
     uint mSamplingRateRIS = 3;
     uint mPatterns[6][8] = { //4x4 grid generation patterns
         {0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU}, // Full
@@ -220,6 +220,13 @@ private:
         {0x80084004U, 0x20021001U, 0x08800440U, 0x02200110U, 0x80084004U, 0x20021001U, 0x08800440U, 0x02200110U}, // 1/8
         {0x80004000U, 0x20001000U, 0x08000400U, 0x02000100U, 0x00800040U, 0x00200010U, 0x00080004U, 0x00020001U}  // 1/16
     };
+
+    // Per Pixel
+    bool mEnableAdaptiveRISPerPixel = false;
+    float mAdaptiveMinPerPixelRISRate = 0.025f;
+    float mAdaptiveMaxPerPixelRISRate = 1.0f;
+
+    // Buffers
     std::vector<uint> mRISPathIDsData = std::vector<uint>(3840 * 2160, 0u);
     std::vector<uint> mNonRISPathIDsData = std::vector<uint>(3840 * 2160, 0u);
     Buffer::SharedPtr mRISPathIDs = Buffer::create(mRISPathIDsData.size() * sizeof(uint), ResourceBindFlags::UnorderedAccess, Buffer::CpuAccess::Read, mRISPathIDsData.data());
@@ -229,7 +236,6 @@ private:
     bool mEnableAdaptiveTemporalReuse = true;
     bool mValidAdaptiveHistory = false;
     float mAdaptiveTemporalHistoryCap = 22.0f;
-    float mAdaptiveMinPerPixelRISRate = 0.025f;
 
     ComputePass::SharedPtr          mpSpatialReusePass;      ///< Merges reservoirs.
     ComputePass::SharedPtr          mpTemporalReusePass;      ///< Merges reservoirs.
