@@ -115,7 +115,7 @@ struct PathGenerator
             GroupMemoryBarrierWithGroupSync();
             if (RISPixel)
             {
-                gRISPathIDs[bufferOffset] = (pixel.y << 12) | pixel.x;
+                gRISPathIDs[bufferOffset] = (1U << 24) | (pixel.y << 12) | pixel.x;
             }
 
             // Write pathID to gNonRISPathIDs buffer for each non-RIS candidate pixel using prefix sum

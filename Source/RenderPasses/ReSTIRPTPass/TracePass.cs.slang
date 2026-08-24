@@ -62,16 +62,18 @@ void main(uint3 dispatchThreadId : SV_DispatchThreadID)
     if (pathIDIndex > gRISPathIDs[0]) return;
 
     uint pathID = gRISPathIDs[pathIDIndex];
-    pixel.x = pathID & 0xfff;
+    uint sampleCount = pathID >> 24;
+    pathID &= 0x00FFFFFF;
+    pixel.x = pathID & 0x00000FFF;
     pixel.y = pathID >> 12;
 
     // Skip pixel if there is no hit in the vbuffer. // Should be skippable now
     HitInfo hit = HitInfo(gPathTracer.vbuffer[pixel]);
     if (!hit.isValid()) return;
-    
+
     PathReservoir giReservoir;
 
-    static const uint itersPerShaderPass = PathSamplingMode(kPathSamplingMode) == PathSamplingMode::PathTracing ? kSamplesPerPixel : kCandidateSamples;
+    uint itersPerShaderPass = PathSamplingMode(kPathSamplingMode) == PathSamplingMode::PathTracing ? kSamplesPerPixel : sampleCount;
 
     if (itersPerShaderPass == 1)
     {

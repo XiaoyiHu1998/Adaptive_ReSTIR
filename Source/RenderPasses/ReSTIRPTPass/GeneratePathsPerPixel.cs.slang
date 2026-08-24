@@ -140,7 +140,7 @@ struct PathGenerator
                 return;
             }
 
-            // Determine if current pixel needs to generate new RIS candidate based on chance
+            // Determine if current pixel needs to generate new RIS candidate using temporal data
             PathReservoir temporalReservoir;
             bool validTemporalReservoir = true;
             bool disoccluded;
@@ -179,8 +179,6 @@ struct PathGenerator
 
                 // Incorrect Reprojection handling
                 float3 temporalColor = temporalReservoir.F * temporalReservoir.weight;
-
-                // Write pixels with disocclusion and incorrect shift mapping or no contribution into a buffer for per pixel path generator
                 if (temporalColor.r + temporalColor.b + temporalColor.g < 0.0001f)
                 {
                     // color.g = 100000.0f;
@@ -196,11 +194,18 @@ struct PathGenerator
                 }
             }
 
+            // Calculate chance of generating new samples [0,inf)
             float candidateChance = 1.f - easingFunction(min(gAdaptiveTemporalHistoryCap, temporalReservoir.M) / gAdaptiveTemporalHistoryCap);
             if (specularOrTransmissiveMaterials) { candidateChance += 0.5f; }
-            bool RISPixel = sampleNext1D(sg) <= max(gAdaptiveMinPerPixelRISRate, candidateChance) || !validTemporalReservoir || disoccluded || incorrectReprojection;
+
+            // candidateChance / 1.0f gives the amount of guaranteed new samples and candidateChance % 1.0f gives chance of an additional sample
+            uint sampleCount = uint(candidateChance / 1.f);
+            candidateChance = max(gAdaptiveMinPerPixelRISRate, candidateChance % 1.0f);
+            if (sampleNext1D(sg) <= candidateChance || !validTemporalReservoir || disoccluded || incorrectReprojection)
+                sampleCount++;
 
             // Write pathID to gRISPathIDs buffer for each RIS candidate pixel using prefix sum
+            bool RISPixel = sampleCount > 0;
             uint prefixSum = WavePrefixCountBits(RISPixel);
             uint generateCount = WaveActiveCountBits(RISPixel);
 
@@ -214,7 +219,7 @@ struct PathGenerator
             GroupMemoryBarrierWithGroupSync();
             if (RISPixel)
             {
-                gRISPathIDs[bufferOffset] = (pixel.y << 12) | pixel.x;
+                gRISPathIDs[bufferOffset] = (sampleCount << 24) | (pixel.y << 12) | pixel.x; // pathID stores 8 bit sample count, 12 bit y, 12 bit x in this order
             }
 
             // Write pathID to gNonRISPathIDs buffer for each non-RIS candidate pixel using prefix sum

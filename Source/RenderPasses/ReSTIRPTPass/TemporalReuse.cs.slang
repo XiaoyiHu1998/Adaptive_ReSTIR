@@ -425,7 +425,8 @@ struct PathReusePass
             if (pathIDIndex > gRISPathIDs[0]) return;
 
             uint pathID = gRISPathIDs[pathIDIndex];
-            pixel.x = pathID & 0xfff;
+            pathID &= 0x00FFFFFF;
+            pixel.x = pathID & 0xFFF;
             pixel.y = pathID >> 12;
 
             ReSTIR(pixel, false);
