@@ -362,8 +362,9 @@ struct PathReusePass
                 color.g = 0.15f;
                 color.b = 0.15f;
             }
-            float distanceCurrent = length(abs(centralPrimarySd.posW - gScene.camera.getPosition(false)));
-            float distancePrev = length(abs(temporalPrimarySd.posW - gScene.camera.getPosition(false)));
+            float3 cameraPosW = gScene.camera.getPosition(false);
+            float distanceCurrent = length(abs(centralPrimarySd.posW - cameraPosW));
+            float distancePrev = length(abs(temporalPrimarySd.posW - cameraPosW));
             bool disoccluded = distanceCurrent / distancePrev > 1.01f;
             if (disoccluded || !isValidScreenRegion(prevPixel)) // Debug
             {
@@ -411,16 +412,6 @@ struct PathReusePass
         uint pathIDIndex = 1 + pixel.x + (pixel.y * frameDim.x);
         if (gReprojectionPass)
         {
-            if (pathIDIndex > gRISPathIDs[0]) return;
-
-            uint pathID = gRISPathIDs[pathIDIndex];
-            pixel.x = pathID & 0xfff;
-            pixel.y = pathID >> 12;
-
-            ReSTIR(pixel, false);
-        }
-        else
-        {
             if (pathIDIndex > gNonRISPathIDs[0]) return;
 
             uint pathID = gNonRISPathIDs[pathIDIndex];
@@ -428,6 +419,16 @@ struct PathReusePass
             pixel.y = pathID >> 12;
 
             ReSTIR(pixel, true);
+        }
+        else
+        {
+            if (pathIDIndex > gRISPathIDs[0]) return;
+
+            uint pathID = gRISPathIDs[pathIDIndex];
+            pixel.x = pathID & 0xfff;
+            pixel.y = pathID >> 12;
+
+            ReSTIR(pixel, false);
         }
     }
 };

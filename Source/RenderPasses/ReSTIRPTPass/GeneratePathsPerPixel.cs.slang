@@ -74,6 +74,19 @@ struct PathGenerator
 
     bool isValidScreenRegion(int2 pixel) { return all(pixel >= 0 && pixel < params.frameDim); }
 
+    ShadingData getPixelShadingData(int2 pixel, out PackedHitInfo PrimaryHitPacked)
+    {
+        ShadingData sd = {};
+        Ray ray = gScene.camera.computeRayPinhole(pixel, params.frameDim);
+        PrimaryHitPacked = vbuffer[pixel];
+        if (isValidPackedHitInfo(PrimaryHitPacked))
+        {
+            HitInfo PrimaryHit; PrimaryHit.unpack(PrimaryHitPacked);
+            sd = loadShadingData(PrimaryHit, -ray.dir, true);
+        }
+        return sd;
+    }
+
     ShadingData getPixelTemporalShadingData(int2 pixel, out PackedHitInfo PrimaryHitPacked)
     {
         ShadingData sd = {};
@@ -130,6 +143,9 @@ struct PathGenerator
             // Determine if current pixel needs to generate new RIS candidate based on chance
             PathReservoir temporalReservoir;
             bool validTemporalReservoir = true;
+            bool disoccluded;
+            bool incorrectReprojection = false;
+            bool specularOrTransmissiveMaterials = false;
             var sg = TinyUniformSampleGenerator(pixel, (kCandidateSamples + 1 + 1) * params.seed + kCandidateSamples);
             { 
                 float2 motionVector = motionVectors[pixel];
@@ -144,6 +160,9 @@ struct PathGenerator
 
                 if (!isValidScreenRegion(prevPixel) || !foundTemporalSurface) { validTemporalReservoir = false; }
 
+                PackedHitInfo centralPrimaryHitPacked;
+                ShadingData centralPrimarySd = getPixelShadingData(pixel, centralPrimaryHitPacked);
+
                 PackedHitInfo temporalPrimaryHitPacked;
                 ShadingData temporalPrimarySd = getPixelTemporalShadingData(prevPixel, temporalPrimaryHitPacked);
                 if (!isValidPackedHitInfo(temporalPrimaryHitPacked)) { validTemporalReservoir = false; }
@@ -151,10 +170,35 @@ struct PathGenerator
                 // bool doTemporalUpdateForDynamicScene = kTemporalUpdateForDynamicScene; // Doesn't seem to be necessary
 
                 temporalReservoir = temporalReservoirs[params.getReservoirOffset(prevPixel)];
+
+                // Disocclusion handling
+                float3 cameraPosW = gScene.camera.getPosition(false);
+                float distanceCurrent = length(abs(centralPrimarySd.posW - cameraPosW));
+                float distancePrev = length(abs(temporalPrimarySd.posW - cameraPosW));
+                disoccluded = distanceCurrent / distancePrev > 1.01f;
+
+                // Incorrect Reprojection handling
+                float3 temporalColor = temporalReservoir.F * temporalReservoir.weight;
+
+                // Write pixels with disocclusion and incorrect shift mapping or no contribution into a buffer for per pixel path generator
+                if (temporalColor.r + temporalColor.b + temporalColor.g < 0.0001f)
+                {
+                    // color.g = 100000.0f;
+                    incorrectReprojection = true;
+                }
+
+                // Handle Specular and Transmissive materials
+                bool transmissiveMaterial = any(temporalPrimarySd.transmission > 0.f);
+                bool specularMaterial = any(temporalPrimarySd.specular > 0.8f);
+                if (transmissiveMaterial || specularMaterial)
+                {
+                    specularOrTransmissiveMaterials = true;
+                }
             }
 
             float candidateChance = 1.f - easingFunction(min(gAdaptiveTemporalHistoryCap, temporalReservoir.M) / gAdaptiveTemporalHistoryCap);
-            bool RISPixel = sampleNext1D(sg) <= max(gAdaptiveMinPerPixelRISRate, candidateChance) || !validTemporalReservoir;
+            if (specularOrTransmissiveMaterials) { candidateChance += 0.5f; }
+            bool RISPixel = sampleNext1D(sg) <= max(gAdaptiveMinPerPixelRISRate, candidateChance) || !validTemporalReservoir || disoccluded || incorrectReprojection;
 
             // Write pathID to gRISPathIDs buffer for each RIS candidate pixel using prefix sum
             uint prefixSum = WavePrefixCountBits(RISPixel);
