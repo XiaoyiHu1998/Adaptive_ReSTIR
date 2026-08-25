@@ -198,11 +198,11 @@ struct PathGenerator
             // Calculate chance of generating new samples [0,inf)
             float candidateChance = 1.f - easingFunction(min(gAdaptiveTemporalHistoryCap, temporalReservoir.M) / gAdaptiveTemporalHistoryCap);
             if (specularOrTransmissiveMaterials) { candidateChance += 0.5f; }
+            candidateChance = min(gAdaptiveMaxPerPixelRISRate, max(gAdaptiveMinPerPixelRISRate, candidateChance));
 
             // candidateChance / 1.0f gives the amount of guaranteed new samples and candidateChance % 1.0f gives chance of an additional sample
             uint sampleCount = uint(candidateChance / 1.f);
-            candidateChance = min(gAdaptiveMaxPerPixelRISRate, max(gAdaptiveMinPerPixelRISRate, candidateChance % 1.0f));
-            if (sampleNext1D(sg) <= candidateChance || !validTemporalReservoir || disoccluded || incorrectReprojection)
+            if (sampleNext1D(sg) <= (candidateChance % 1.f) || !validTemporalReservoir || disoccluded || incorrectReprojection)
                 sampleCount++;
 
             // Write pathID to gRISPathIDs buffer for each RIS candidate pixel using prefix sum

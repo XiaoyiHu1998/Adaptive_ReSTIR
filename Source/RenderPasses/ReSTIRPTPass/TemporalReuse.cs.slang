@@ -389,7 +389,7 @@ struct PathReusePass
     /** Entry point for merge pass.
         \param[in] pixel Pixel coordinates.
     */
-    void execute(const uint2 _pixel, const uint2 groupThreadID)
+    void execute(const uint2 _pixel)
     {
         uint2 pixel = _pixel;
 
@@ -415,6 +415,7 @@ struct PathReusePass
             if (pathIDIndex > gNonRISPathIDs[0]) return;
 
             uint pathID = gNonRISPathIDs[pathIDIndex];
+            pathID &= 0x00FFFFFF;
             pixel.x = pathID & 0xfff;
             pixel.y = pathID >> 12;
 
@@ -440,7 +441,7 @@ cbuffer CB
 }
 
 [numthreads(16, 16, 1)]
-void main(uint3 dispatchThreadId: SV_DispatchThreadID, uint3 groupThreadID: SV_GroupThreadID)
+void main(uint3 dispatchThreadId: SV_DispatchThreadID)
 {
-    gPathReusePass.execute(dispatchThreadId.xy, groupThreadID.xy);
+    gPathReusePass.execute(dispatchThreadId.xy);
 }

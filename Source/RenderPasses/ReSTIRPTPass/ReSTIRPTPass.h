@@ -79,6 +79,7 @@ private:
     void generatePaths(RenderContext* pRenderContext, const RenderData& renderData, int sampleId = 0);
     void generatePathsNaive(RenderContext* pRenderContext, const RenderData& renderData, int sampleId = 0);
     void generatePathsPerPixel(RenderContext* pRenderContext, const RenderData& renderData, int sampleId = 0);
+    void generatePathsTileBased(RenderContext* pRenderContext, const RenderData& renderData, int sampleId = 0);
     void tracePass(RenderContext* pRenderContext, const RenderData& renderData, const ComputePass::SharedPtr& pass, const std::string& passName, int sampleId);
     void PathReusePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool temporalReuse = false, int spatialRoundId = 0, bool isLastRound = false, bool temporalReproject = false);
     void PathRetracePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool temporalReuse = false, int spatialRoundId = 0);
@@ -210,7 +211,7 @@ private:
 
     // Adaptive RIS Path Generation
     // Naive
-    bool mEnableAdaptiveRISNaive = true;
+    bool mEnableAdaptiveRISNaive = false;
     uint mSamplingRateRIS = 3;
     uint mPatterns[6][8] = { //4x4 grid generation patterns
         {0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU}, // Full
@@ -225,6 +226,10 @@ private:
     bool mEnableAdaptiveRISPerPixel = false;
     float mAdaptiveMinPerPixelRISRate = 0.025f;
     float mAdaptiveMaxPerPixelRISRate = 1.0f;
+
+    // Tile-Based
+    bool mEnableAdaptiveRISTileBased = true;
+    uint mAdaptiveTileSize = 4;
 
     // Buffers
     std::vector<uint> mRISPathIDsData = std::vector<uint>(3840 * 2160, 0u);
@@ -247,6 +252,7 @@ private:
     ComputePass::SharedPtr          mpGeneratePaths;                ///< Fullscreen compute pass generating paths starting at primary hits.
     ComputePass::SharedPtr          mpGeneratePathsNaive;           ///< Fullscreen compute pass generating paths starting at primary hits.
     ComputePass::SharedPtr          mpGeneratePathsPerPixel;        ///< Fullscreen compute pass generating paths starting at primary hits.
+    ComputePass::SharedPtr          mpGeneratePathsTileBased;        ///< Fullscreen compute pass generating paths starting at primary hits.
     ComputePass::SharedPtr          mpTracePass;                    ///< Main tracing pass.
 
     ComputePass::SharedPtr          mpReflectTypes;             ///< Helper for reflecting structured buffer types.
