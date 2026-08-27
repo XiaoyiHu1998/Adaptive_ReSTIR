@@ -981,7 +981,10 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
 
         if (mEnableAdaptiveRISNaive)
         {
-            dirty |= widget.dropdown("Sampling Rate", kSamplingRateRIS, reinterpret_cast<uint32_t&>(mSamplingRateRIS));
+            if (auto group = widget.group("Naive Scheme Parameters", true))
+            {
+                dirty |= widget.dropdown("Sampling Rate", kSamplingRateRIS, reinterpret_cast<uint32_t&>(mSamplingRateRIS));
+            }
         }
 
         if (widget.checkbox("Adaptive RIS Per Pixel", mEnableAdaptiveRISPerPixel))
@@ -989,6 +992,17 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
             dirty = true;
             mEnableAdaptiveRISNaive = false;
             mEnableAdaptiveRISTileBased = false;
+        }
+
+        if (mEnableAdaptiveRISPerPixel)
+        {
+            if (auto group = widget.group("Per Pixel Scheme Parameters", true))
+            {
+                dirty |= widget.var("Min Chance", mAdaptiveMinPerPixelRISRate);
+                dirty |= widget.var("Max Chance", mAdaptiveMaxPerPixelRISRate);
+                dirty |= widget.checkbox("Duplication Mapping", mEnableDuplicationMapping);
+                dirty |= widget.var("Duplication Mapping Alpha", mDuplicationMappingAlpha);
+            }
         }
 
         if (widget.checkbox("Adaptive RIS Tile based", mEnableAdaptiveRISTileBased))
@@ -1000,22 +1014,19 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
 
         if (mEnableAdaptiveRISTileBased)
         {
-            if (widget.var("Tile Size", mAdaptiveTileSize))
+            if (auto group = widget.group("Tile Based Scheme Parameters", true))
             {
-                dirty = true;
-                
-                if(mAdaptiveTileSize < 4)
-                    mAdaptiveTileSize = 4;
+                if (widget.var("Tile Size", mAdaptiveTileSize))
+                {
+                    dirty = true;
+                    
+                    if(mAdaptiveTileSize < 4)
+                        mAdaptiveTileSize = 4;
 
-                if(mAdaptiveTileSize > 16)
-                    mAdaptiveTileSize = 16;
+                    if(mAdaptiveTileSize > 16)
+                        mAdaptiveTileSize = 16;
+                }
             }
-        }
-
-        if (mEnableAdaptiveRISPerPixel)
-        {
-            dirty |= widget.var("Min Chance", mAdaptiveMinPerPixelRISRate);
-            dirty |= widget.var("Max Chance", mAdaptiveMaxPerPixelRISRate);
         }
 
         if (widget.checkbox("Adaptive Temporal Reuse", mEnableAdaptiveTemporalReuse))
@@ -1026,9 +1037,11 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
 
         if (mEnableAdaptiveTemporalReuse)
         {
-                dirty |= widget.var("Adaptive Temporal History Cap", mAdaptiveTemporalHistoryCap, 0.0f, 100.0f);
+            dirty |= widget.var("Adaptive Temporal History Cap", mAdaptiveTemporalHistoryCap, 0.0f, 100.0f);
         }
 
+
+        // ReSTIR PT
         if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
         {
             if (widget.checkbox("Temporal Reuse (Incompatible with Adaptive RIS)", mEnableTemporalReuse))
@@ -1797,6 +1810,8 @@ void ReSTIRPTPass::generatePathsPerPixel(RenderContext* pRenderContext, const Re
     var["gAdaptiveTemporalHistoryCap"] = mAdaptiveTemporalHistoryCap;
     var["gAdaptiveMinPerPixelRISRate"] = mAdaptiveMinPerPixelRISRate;
     var["gAdaptiveMaxPerPixelRISRate"] = mAdaptiveMaxPerPixelRISRate;
+    var["gDuplicationMap"] = mDuplicationMap->asBuffer();
+    var["gEnableDuplicationMapping"] = mEnableDuplicationMapping;
 
     // Launch one thread per pixel.
     // The dimensions are padded to whole tiles to allow re-indexing the threads in the shader.
@@ -1946,6 +1961,9 @@ void ReSTIRPTPass::PathReusePass(RenderContext* pRenderContext, uint32_t restir_
         var["gReprojectionPass"] = temporalReproject;
         var["gRISPathIDs"] = mRISPathIDs->asBuffer();
         var["gNonRISPathIDs"] = mNonRISPathIDs->asBuffer();
+        var["gDuplicationMap"] = mDuplicationMap->asBuffer();
+        var["gEnableDuplicationMapping"] = mEnableDuplicationMapping && mEnableAdaptiveRISPerPixel;
+        var["gDuplicationMappingAlpha"] = mDuplicationMappingAlpha;
 
         var["temporalVbuffer"] = mpTemporalVBuffer;
         var["motionVectors"] = renderData[kInputMotionVectors]->asTexture();

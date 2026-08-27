@@ -36,7 +36,7 @@ struct PathReusePass
     Texture2D<float4> directLighting;                  
     bool useDirectLighting;
 
-    int  gNumSpatialRounds;
+    int gNumSpatialRounds;
 
     bool gIsLastRound;
     bool gEnableTemporalReprojection;
@@ -47,6 +47,7 @@ struct PathReusePass
     // Adaptive ReSTIR
     Buffer<uint> gRISPathIDs;
     Buffer<uint> gNonRISPathIDs;
+    RWBuffer<float> gDuplicationMap;
 
     uint gPatternShift;      // Amount of bits to shift right to access the right RIS candidate pattern for current frame
     uint gGenerationPattern; // uint encoding for which pixels are RIS candidates within a 4x4 grid, contains patterns for two subsequent frames
@@ -56,6 +57,8 @@ struct PathReusePass
 
     bool gAdaptiveTemporalReuse;
     float gAdaptiveTemporalHistoryCap;
+    bool gEnableDuplicationMapping;
+    float gDuplicationMappingAlpha;
 
     bool isValidPackedHitInfo(PackedHitInfo packed)
     {
@@ -161,14 +164,17 @@ struct PathReusePass
             bool doTemporalUpdateForDynamicScene = kTemporalUpdateForDynamicScene;
 
             PathReservoir temporalReservoir = temporalReservoirs[params.getReservoirOffset(prevPixel)];
+            float duplicationScore = 0.0f;
+            if (gEnableDuplicationMapping)
+            {
+                duplicationScore = gDuplicationMap[pixel.x + pixel.y * params.frameDim.x];
+            }
+            float lerpFactor = pow(duplicationScore, gDuplicationMappingAlpha);
 
             if (reproject)
-                temporalReservoir.M = min(gAdaptiveTemporalHistoryCap, temporalReservoir.M);
+                temporalReservoir.M = min(lerp(gAdaptiveTemporalHistoryCap, 1.f, lerpFactor), temporalReservoir.M);
             else
-                temporalReservoir.M = min(gTemporalHistoryLength * currentM, temporalReservoir.M);
-
-            // if (!reproject)
-            //     temporalReservoir.M = min(gTemporalHistoryLength * currentM, temporalReservoir.M);
+                temporalReservoir.M = min(lerp(gTemporalHistoryLength, 1.f, lerpFactor) * currentM, temporalReservoir.M);
 
             float dstJacobian;
 
@@ -336,42 +342,9 @@ struct PathReusePass
             }
 // #endregion
 
-            // float3 confidenceWeightColor = float3(dstReservoir.M, dstReservoir.M, dstReservoir.M) / gAdaptiveTemporalHistoryCap;
-
             if (dstReservoir.weight < 0.f || isinf(dstReservoir.weight) || isnan(dstReservoir.weight)) dstReservoir.weight = 0.f;
             outputReservoirs[centralOffset] = dstReservoir;
             color = dstReservoir.F * dstReservoir.weight;
-
-            // Write pixels with disocclusion and incorrect shift mapping or no contribution into a buffer for per pixel path generator
-            if (color.r + color.b + color.g < 0.0001f)
-            {
-                // color.g = 100000.0f;
-            }
-
-            if (dstReservoir.M <= 5.f) // Debug
-            {
-                color.b = 100000.0f;
-            }
-            else if (dstReservoir.M <= 10.f)
-            {
-                color.g = 0.5f;
-                color.b = 0.5f;
-            }
-            else if (dstReservoir.M <= 15.f)
-            {
-                color.g = 0.15f;
-                color.b = 0.15f;
-            }
-            float3 cameraPosW = gScene.camera.getPosition(false);
-            float distanceCurrent = length(abs(centralPrimarySd.posW - cameraPosW));
-            float distancePrev = length(abs(temporalPrimarySd.posW - cameraPosW));
-            bool disoccluded = distanceCurrent / distancePrev > 1.01f;
-            if (disoccluded || !isValidScreenRegion(prevPixel)) // Debug
-            {
-                color.r = 100000.0f;
-            }
-
-            // color.r = dstReservoir.M / gAdaptiveTemporalHistoryCap;
 
             if (gIsLastRound)
             {

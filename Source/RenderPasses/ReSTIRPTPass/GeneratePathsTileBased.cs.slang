@@ -206,23 +206,44 @@ struct PathGenerator
         // Determine RIS generation pattern
         uint generationPattern = 0xFFFFFFFF;
         float referenceSampleCount = float(kAdaptiveTileSize) * float(kAdaptiveTileSize);
-        if (targetSampleCount < referenceSampleCount * 0.0625f)
+        // if (targetSampleCount < referenceSampleCount * 0.0625f)
+        // {
+        //     generationPattern = gPatternOneSixteenth;
+        // }
+        // else if (targetSampleCount < referenceSampleCount * 0.125f)
+        // {
+        //     generationPattern = gPatternOneEight;
+        // }
+        // else if (targetSampleCount < referenceSampleCount * 0.25f)
+        // {
+        //     generationPattern = gPatternQuarter;
+        // }
+        // else if (targetSampleCount < referenceSampleCount * 0.5f)
+        // {
+        //     generationPattern = gPatternHalf;
+        // }
+        // else if (targetSampleCount < referenceSampleCount * 0.75f)
+        // {
+        //     generationPattern = gPatternThreeQuarters;
+        // }
+
+        if (targetSampleCount < referenceSampleCount * 0.125f)
         {
             generationPattern = gPatternOneSixteenth;
         }
-        else if (targetSampleCount < referenceSampleCount * 0.125f)
+        else if (targetSampleCount < referenceSampleCount * 0.25f)
         {
             generationPattern = gPatternOneEight;
         }
-        else if (targetSampleCount < referenceSampleCount * 0.25f)
+        else if (targetSampleCount < referenceSampleCount * 0.5f)
         {
             generationPattern = gPatternQuarter;
         }
-        else if (targetSampleCount < referenceSampleCount * 0.5f)
+        else if (targetSampleCount < referenceSampleCount * 0.75f)
         {
             generationPattern = gPatternHalf;
         }
-        else if (targetSampleCount < referenceSampleCount * 0.75f)
+        else if (targetSampleCount < referenceSampleCount)
         {
             generationPattern = gPatternThreeQuarters;
         }

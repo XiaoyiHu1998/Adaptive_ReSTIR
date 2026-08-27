@@ -223,13 +223,13 @@ private:
     };
 
     // Per Pixel
-    bool mEnableAdaptiveRISPerPixel = false;
+    bool mEnableAdaptiveRISPerPixel = true;
     float mAdaptiveMinPerPixelRISRate = 0.025f;
     float mAdaptiveMaxPerPixelRISRate = 1.0f;
 
     // Tile-Based
-    bool mEnableAdaptiveRISTileBased = true;
-    uint mAdaptiveTileSize = 4;
+    bool mEnableAdaptiveRISTileBased = false;
+    uint mAdaptiveTileSize = 16;
 
     // Buffers
     std::vector<uint> mRISPathIDsData = std::vector<uint>(3840 * 2160, 0u);
@@ -240,7 +240,13 @@ private:
     // Adaptive Temporal Reuse
     bool mEnableAdaptiveTemporalReuse = true;
     bool mValidAdaptiveHistory = false;
-    float mAdaptiveTemporalHistoryCap = 22.0f;
+    float mAdaptiveTemporalHistoryCap = 20.0f;
+
+    // Adaptive Duplication Mapping
+    bool mEnableDuplicationMapping = true;
+    float mDuplicationMappingAlpha = 0.1f;
+    std::vector<float> mDuplicationMapData = std::vector<float>(3840 * 2160, 0.0f);
+    Buffer::SharedPtr mDuplicationMap = Buffer::create(mDuplicationMapData.size() * sizeof(float), ResourceBindFlags::UnorderedAccess, Buffer::CpuAccess::Read, mDuplicationMapData.data());
 
     ComputePass::SharedPtr          mpSpatialReusePass;      ///< Merges reservoirs.
     ComputePass::SharedPtr          mpTemporalReusePass;      ///< Merges reservoirs.

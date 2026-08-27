@@ -56,12 +56,14 @@ struct PathGenerator
 
     RWBuffer<uint> gRISPathIDs;
     RWBuffer<uint> gNonRISPathIDs;
+    RWBuffer<float> gDuplicationMap;
 
     int gSampleId;
     bool gEnableTemporalReprojection;
     float gAdaptiveTemporalHistoryCap;
     float gAdaptiveMinPerPixelRISRate;
     float gAdaptiveMaxPerPixelRISRate;
+    bool gEnableDuplicationMapping;
 
     // Render settings that depend on the scene.
     // TODO: Move into scene defines.
@@ -143,6 +145,7 @@ struct PathGenerator
 
             // Determine if current pixel needs to generate new RIS candidate using temporal data
             PathReservoir temporalReservoir;
+            uint prevPixelOffset;
             bool validTemporalReservoir = true;
             bool disoccluded;
             bool incorrectReprojection = false;
@@ -170,7 +173,8 @@ struct PathGenerator
 
                 // bool doTemporalUpdateForDynamicScene = kTemporalUpdateForDynamicScene; // Doesn't seem to be necessary
 
-                temporalReservoir = temporalReservoirs[params.getReservoirOffset(prevPixel)];
+                prevPixelOffset = params.getReservoirOffset(prevPixel);
+                temporalReservoir = temporalReservoirs[prevPixelOffset];
 
                 // Disocclusion handling
                 float3 cameraPosW = gScene.camera.getPosition(false);
@@ -195,14 +199,39 @@ struct PathGenerator
                 }
             }
 
+            // Detect Fireflies according to ReSTIR PT Enhanced paper
+            float duplicationScore = 0.f;
+            if (gEnableDuplicationMapping)
+            {
+                // Handle Fireflies according to ReSTIR PT Enhanced paper
+                float sameReservoirSeeds = 0.f;
+                for (int i = -8; i < 9; i++)
+                {
+                    for (int j = -8; j < 9; j++)
+                    {
+                        uint2 neighbourPixel = pixel + uint2(i, j);
+                        if (any(neighbourPixel > params.frameDim) || any(neighbourPixel < uint2(0, 0)) || (i == 0 & j == 0))
+                            continue;
+
+                        uint neighbourOffset = params.getReservoirOffset(neighbourPixel);
+                        if (temporalReservoir.rcRandomSeed == temporalReservoirs[neighbourOffset].rcRandomSeed)
+                            sameReservoirSeeds += 1.0f;
+                    }
+                }
+                duplicationScore = sameReservoirSeeds / 288.f;
+                gDuplicationMap[pixel.x + pixel.y * params.frameDim.x] = duplicationScore;
+            }
+
             // Calculate chance of generating new samples [0,inf)
             float candidateChance = 1.f - easingFunction(min(gAdaptiveTemporalHistoryCap, temporalReservoir.M) / gAdaptiveTemporalHistoryCap);
-            if (specularOrTransmissiveMaterials) { candidateChance += 0.5f; }
+            if (!validTemporalReservoir || disoccluded || incorrectReprojection) { candidateChance = 1.0f; }
+            if (specularOrTransmissiveMaterials) { candidateChance = 0.5f; }
+            candidateChance += duplicationScore;
             candidateChance = min(gAdaptiveMaxPerPixelRISRate, max(gAdaptiveMinPerPixelRISRate, candidateChance));
 
             // candidateChance / 1.0f gives the amount of guaranteed new samples and candidateChance % 1.0f gives chance of an additional sample
             uint sampleCount = uint(candidateChance / 1.f);
-            if (sampleNext1D(sg) <= (candidateChance % 1.f) || !validTemporalReservoir || disoccluded || incorrectReprojection)
+            if (sampleNext1D(sg) <= (candidateChance % 1.f))
                 sampleCount++;
 
             // Write pathID to gRISPathIDs buffer for each RIS candidate pixel using prefix sum
