@@ -749,7 +749,7 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
                 mpPathTracerBlock->getRootVar()["gSppId"] = restir_i;
                 mpPathTracerBlock->getRootVar()["gNumSpatialRounds"] = mNumSpatialRounds;
                 mRISPathIDs->setElement(0, 0u);
-                mNonRISPathIDs->setElement(0, 0u);
+                mPixelCandidateStatus->setElement(0, 0u);
 
                 if (restir_i == 0)
                 {
@@ -786,8 +786,8 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
                     PathReusePass(pRenderContext, restir_i, renderData, true, 0, !mEnableSpatialReuse);
 
                     // Per pixel and Tile based path generation use seperate pass for non RIS candidates
-                    if (mEnableAdaptiveRISPerPixel || mEnableAdaptiveRISTileBased)
-                        PathReusePass(pRenderContext, restir_i, renderData, true, 0, !mEnableSpatialReuse, true);
+                    // if (mEnableAdaptiveRISPerPixel || mEnableAdaptiveRISTileBased)
+                    //     PathReusePass(pRenderContext, restir_i, renderData, true, 0, !mEnableSpatialReuse);
                 }
 
                 mValidAdaptiveHistory = mEnableAdaptiveTemporalReuse;
@@ -830,7 +830,7 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
 
             if ((mEnableTemporalReuse || mEnableAdaptiveTemporalReuse) && mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
             {
-                if ((!mEnableSpatialReuse || mNumSpatialRounds % 2 == 0 || (mEnableAdaptiveTemporalReuse && !mEnableSpatialReuse)))
+                if ((!mEnableSpatialReuse || mNumSpatialRounds % 2 == 0))
                     pRenderContext->copyResource(mpTemporalReservoirs[restir_i].get(), mpOutputReservoirs.get());
                 if (restir_i == numPasses - 1)
                     pRenderContext->copyResource(mpTemporalVBuffer.get(), renderData[kInputVBuffer].get());
@@ -1016,16 +1016,8 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
         {
             if (auto group = widget.group("Tile Based Scheme Parameters", true))
             {
-                if (widget.var("Tile Size", mAdaptiveTileSize))
-                {
-                    dirty = true;
-                    
-                    if(mAdaptiveTileSize < 4)
-                        mAdaptiveTileSize = 4;
-
-                    if(mAdaptiveTileSize > 16)
-                        mAdaptiveTileSize = 16;
-                }
+                dirty |= widget.checkbox("Duplication Mapping", mEnableDuplicationMapping);
+                dirty |= widget.var("Duplication Mapping Alpha", mDuplicationMappingAlpha);
             }
         }
 
@@ -1769,7 +1761,7 @@ void ReSTIRPTPass::generatePathsNaive(RenderContext* pRenderContext, const Rende
     var["gPatternShift"] = ((mReservoirFrameCount % 16) % 2) ? 0 : 16;
     var["gGenerationPattern"] = mPatterns[mEnableAdaptiveRISNaive ? mSamplingRateRIS : 0][(mReservoirFrameCount % 16) / 2];
     var["gRISPathIDs"] = mRISPathIDs->asBuffer();
-    var["gNonRISPathIDs"] = mNonRISPathIDs->asBuffer();
+    var["gPixelCandidateStatus"] = mPixelCandidateStatus->asBuffer();
     var["outputReservoirs"] = mpOutputReservoirs;
 
     // Launch one thread per pixel.
@@ -1801,15 +1793,18 @@ void ReSTIRPTPass::generatePathsPerPixel(RenderContext* pRenderContext, const Re
     mpGeneratePathsPerPixel["gScene"] = mpScene->getParameterBlock();
     var["gSampleId"] = sampleId;
     var["gRISPathIDs"] = mRISPathIDs->asBuffer();
-    var["gNonRISPathIDs"] = mNonRISPathIDs->asBuffer();
+    var["gPixelCandidateStatus"] = mPixelCandidateStatus->asBuffer();
     var["outputReservoirs"] = mpOutputReservoirs;
     var["temporalReservoirs"] = mpTemporalReservoirs[0];
     var["motionVectors"] = renderData[kInputMotionVectors]->asTexture();
     var["temporalVbuffer"] = mpTemporalVBuffer;
     var["gEnableTemporalReprojection"] = mEnableTemporalReprojection;
+
     var["gAdaptiveTemporalHistoryCap"] = mAdaptiveTemporalHistoryCap;
     var["gAdaptiveMinPerPixelRISRate"] = mAdaptiveMinPerPixelRISRate;
     var["gAdaptiveMaxPerPixelRISRate"] = mAdaptiveMaxPerPixelRISRate;
+    var["gNonRISFrameCounters"] = mNonRISFrameCounters;
+
     var["gDuplicationMap"] = mDuplicationMap->asBuffer();
     var["gEnableDuplicationMapping"] = mEnableDuplicationMapping;
 
@@ -1838,21 +1833,25 @@ void ReSTIRPTPass::generatePathsTileBased(RenderContext* pRenderContext, const R
     // Bind resources.
     auto var = mpGeneratePathsTileBased->getRootVar()["CB"]["gPathGenerator"];
     setShaderData(var, renderData, false, true);
-    
-    mpGeneratePathsTileBased->getRootVar()["CB"]["kAdaptiveTileSize"] = mAdaptiveTileSize;
 
     mpGeneratePathsTileBased["gScene"] = mpScene->getParameterBlock();
     var["gSampleId"] = sampleId;
     var["gRISPathIDs"] = mRISPathIDs->asBuffer();
-    var["gNonRISPathIDs"] = mNonRISPathIDs->asBuffer();
+    var["gPixelCandidateStatus"] = mPixelCandidateStatus->asBuffer();
     var["outputReservoirs"] = mpOutputReservoirs;
     var["temporalReservoirs"] = mpTemporalReservoirs[0];
     var["motionVectors"] = renderData[kInputMotionVectors]->asTexture();
     var["temporalVbuffer"] = mpTemporalVBuffer;
     var["gEnableTemporalReprojection"] = mEnableTemporalReprojection;
-    var["gAdaptiveTemporalHistoryCap"] = mAdaptiveTemporalHistoryCap;
-    var["gPatternShift"] = ((mReservoirFrameCount % 16) % 2) ? 0 : 16;
 
+    var["gAdaptiveTemporalHistoryCap"] = mAdaptiveTemporalHistoryCap;
+    // var["gAdaptiveMinPerPixelRISRate"] = mAdaptiveMinPerPixelRISRate;
+    // var["gAdaptiveMaxPerPixelRISRate"] = mAdaptiveMaxPerPixelRISRate;
+
+    var["gDuplicationMap"] = mDuplicationMap->asBuffer();
+    var["gEnableDuplicationMapping"] = mEnableDuplicationMapping;
+    
+    var["gPatternShift"] = ((mReservoirFrameCount % 16) % 2) ? 0 : 16;
     var["gPatternThreeQuarters"] = mPatterns[1][(mReservoirFrameCount % 16) / 2];
     var["gPatternHalf"] = mPatterns[2][(mReservoirFrameCount % 16) / 2];
     var["gPatternQuarter"] = mPatterns[3][(mReservoirFrameCount % 16) / 2];
@@ -1861,9 +1860,7 @@ void ReSTIRPTPass::generatePathsTileBased(RenderContext* pRenderContext, const R
 
     // Launch one thread per pixel.
     // The dimensions are padded to whole tiles to allow re-indexing the threads in the shader.
-    uint tileCountX = mParams.frameDim.x / mAdaptiveTileSize + 1;
-    uint tileCountY = mParams.frameDim.y / mAdaptiveTileSize + 1;
-    mpGeneratePathsTileBased->execute(pRenderContext, { tileCountX, tileCountY, 1u });
+    mpGeneratePathsTileBased->execute(pRenderContext, { mParams.screenTiles.x * tileSize, mParams.screenTiles.y, 1u });
 }
 
 void ReSTIRPTPass::tracePass(RenderContext* pRenderContext, const RenderData& renderData, const ComputePass::SharedPtr& pass, const std::string& passName, int sampleID)
@@ -1890,7 +1887,6 @@ void ReSTIRPTPass::tracePass(RenderContext* pRenderContext, const RenderData& re
     var["CB"]["gSampleId"] = sampleID;
     var["CB"]["gMergePaths"] = mEnableAdaptiveTemporalReuse && mValidAdaptiveHistory ? 1 : 0;
     var["gRISPathIDs"] = mRISPathIDs;
-    var["gNonRISPathIDs"] = mNonRISPathIDs;
     var["outputReservoirs"] = mpOutputReservoirs;
     
 
@@ -1902,7 +1898,7 @@ void ReSTIRPTPass::tracePass(RenderContext* pRenderContext, const RenderData& re
     pass->execute(pRenderContext, uint3(frameDim, 1u));
 }
 
-void ReSTIRPTPass::PathReusePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool isTemporalReuse, int spatialRoundId, bool isLastRound, bool temporalReproject)
+void ReSTIRPTPass::PathReusePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool isTemporalReuse, int spatialRoundId, bool isLastRound)
 {
     bool isPathReuseMISWeightComputation = spatialRoundId == -1;
 
@@ -1958,9 +1954,8 @@ void ReSTIRPTPass::PathReusePass(RenderContext* pRenderContext, uint32_t restir_
         var["gAdaptiveTemporalReuse"] = mEnableAdaptiveTemporalReuse;
         var["gAdaptiveTemporalHistoryCap"] = mAdaptiveTemporalHistoryCap;
         var["gUsePathIDBuffers"] = mEnableAdaptiveRISPerPixel || mEnableAdaptiveRISTileBased;
-        var["gReprojectionPass"] = temporalReproject;
         var["gRISPathIDs"] = mRISPathIDs->asBuffer();
-        var["gNonRISPathIDs"] = mNonRISPathIDs->asBuffer();
+        var["gPixelCandidateStatus"] = mPixelCandidateStatus->asBuffer();
         var["gDuplicationMap"] = mDuplicationMap->asBuffer();
         var["gEnableDuplicationMapping"] = mEnableDuplicationMapping && mEnableAdaptiveRISPerPixel;
         var["gDuplicationMappingAlpha"] = mDuplicationMappingAlpha;

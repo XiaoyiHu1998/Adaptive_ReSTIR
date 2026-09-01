@@ -55,12 +55,15 @@ struct PathGenerator
     RWStructuredBuffer<PathReservoir> temporalReservoirs; // reservoir from previous frame
 
     RWBuffer<uint> gRISPathIDs;
-    RWBuffer<uint> gNonRISPathIDs;
+    RWBuffer<uint> gPixelCandidateStatus;
+    RWBuffer<float> gDuplicationMap;
 
     int gSampleId;
     uint gPatternShift;
     bool gEnableTemporalReprojection;
     float gAdaptiveTemporalHistoryCap;
+    
+    bool gEnableDuplicationMapping;
 
     uint gPatternOneSixteenth;
     uint gPatternOneEight;
@@ -111,194 +114,160 @@ struct PathGenerator
         return x * x * x * x * x;
     }
 
-    // Entrypoint
-    void execute(const uint2 startingPixel)
+    uint determineGenerationPattern(float targetCandidateCount)
     {
-        // Determine target RIS candidate count using data from all pixels in tile
-        float targetSampleCount = 0.0f;
-        for (int i = 0; i < kAdaptiveTileSize; i++)
+        // if (targetCandidateCount <= 256.f * 0.0625f)
+        //     return gPatternOneSixteenth;
+
+        if (targetCandidateCount <= 256.f * 0.125f)
+            return gPatternOneEight;
+
+        if (targetCandidateCount <= 256.f * 0.25f)
+            return gPatternQuarter;
+
+        if (targetCandidateCount <= 256.f * 0.50f)
+            return gPatternHalf;
+
+        if (targetCandidateCount <= 256.f * 0.75f)
+            return gPatternThreeQuarters;
+
+        return 0xFFFFFFFF;
+    }
+
+    // Entrypoint
+    void execute(const uint2 tileID, const uint threadIdx)
+    {
+        // Map thread to pixel based on Morton order within tile.
+        // The tiles themselves are enumerated in scanline order on screen.
+        const uint2 tileOffset = tileID << kScreenTileBits;            // Tile offset in pixels.
+        const uint2 pixel = deinterleave_8bit(threadIdx) + tileOffset; // Assumes 16x16 tile or smaller. A host-side assert checks this assumption.
+
+        // Process the pixel to determine which queue to use.
+        // If we don't hit any surfaces or volumes, then the background will be evaluated and written out directly.
+        Ray cameraRay;
+        bool useGeneralQueue = false; // Does not handle no hit only
+
+        // Note: Do not terminate threads for out-of-bounds pixels because we need all threads active for the prefix sum pass below.
+        if (all(pixel < params.frameDim))
         {
-            for (int j = 0; j < kAdaptiveTileSize; j++)
+            // Determine number of samples at the current pixel.
+            // This is either a fixed number or loaded from the sample count texture.
+            // TODO: We may want to use a nearest sampler to allow the texture to be of arbitrary dimension.
+
+            // Compute the primary ray.
+            // TODO: Support depth-of-field using computeRayThinlens, if aperture size > 0.
+            cameraRay = gScene.camera.computeRayPinhole(pixel, params.frameDim);
+
+            // Load the primary hit from the V-buffer.
+            const HitInfo hit = HitInfo(vbuffer[pixel]);
+            bool hitSurface = hit.isValid();
+
+            if (!hitSurface && gSampleId == 0)
             {
-                const uint2 pixel = startingPixel + uint2(i, j);
-
-                Ray cameraRay;
-                if (all(pixel < params.frameDim))
-                {
-                    cameraRay = gScene.camera.computeRayPinhole(pixel, params.frameDim);
-
-                    // Load the primary hit from the V-buffer.
-                    const HitInfo hit = HitInfo(vbuffer[pixel]);
-                    bool hitSurface = hit.isValid();
-
-                    if (!hitSurface && gSampleId == 0)
-                    {
-                        // Write background pixels.
-                        writeBackground(pixel, cameraRay.dir);
-                        continue;
-                    }
-
-                    // Determine if current pixel needs to generate new RIS candidate using temporal data
-                    PathReservoir temporalReservoir;
-                    bool validTemporalReservoir = true;
-                    bool disoccluded;
-                    bool incorrectReprojection = false;
-                    bool specularOrTransmissiveMaterials = false;
-                    var sg = TinyUniformSampleGenerator(pixel, (kCandidateSamples + 1 + 1) * params.seed + kCandidateSamples);
-                    {
-                        float2 motionVector = motionVectors[pixel];
-                        int2 prevPixel = pixel;
-
-                        bool foundTemporalSurface = true;
-
-                        if (gEnableTemporalReprojection)
-                        {
-                            prevPixel = pixel + motionVector * params.frameDim + (sampleNext2D(sg) * 1.f - 0.f);
-                        }
-
-                        if (!isValidScreenRegion(prevPixel) || !foundTemporalSurface) { validTemporalReservoir = false; }
-
-                        PackedHitInfo centralPrimaryHitPacked;
-                        ShadingData centralPrimarySd = getPixelShadingData(pixel, centralPrimaryHitPacked);
-
-                        PackedHitInfo temporalPrimaryHitPacked;
-                        ShadingData temporalPrimarySd = getPixelTemporalShadingData(prevPixel, temporalPrimaryHitPacked);
-                        if (!isValidPackedHitInfo(temporalPrimaryHitPacked)) { validTemporalReservoir = false; }
-
-                        // bool doTemporalUpdateForDynamicScene = kTemporalUpdateForDynamicScene; // Doesn't seem to be necessary
-
-                        temporalReservoir = temporalReservoirs[params.getReservoirOffset(prevPixel)];
-
-                        // Disocclusion handling
-                        float3 cameraPosW = gScene.camera.getPosition(false);
-                        float distanceCurrent = length(abs(centralPrimarySd.posW - cameraPosW));
-                        float distancePrev = length(abs(temporalPrimarySd.posW - cameraPosW));
-                        disoccluded = distanceCurrent / distancePrev > 1.01f;
-
-                        // Incorrect Reprojection handling
-                        float3 temporalColor = temporalReservoir.F * temporalReservoir.weight;
-                        if (temporalColor.r + temporalColor.b + temporalColor.g < 0.0001f)
-                        {
-                            // color.g = 100000.0f;
-                            incorrectReprojection = true;
-                        }
-
-                        // Handle Specular and Transmissive materials
-                        bool transmissiveMaterial = any(temporalPrimarySd.transmission > 0.f);
-                        bool specularMaterial = any(temporalPrimarySd.specular > 0.8f);
-                        if (transmissiveMaterial || specularMaterial)
-                        {
-                            specularOrTransmissiveMaterials = true;
-                        }
-                    }
-
-                    // Calculate chance of generating new samples [0,inf)
-                    float candidateChance = 1.f - easingFunction(min(gAdaptiveTemporalHistoryCap, temporalReservoir.M) / gAdaptiveTemporalHistoryCap);
-                    if (specularOrTransmissiveMaterials) { candidateChance += 0.5f; }
-                    if (!validTemporalReservoir || disoccluded || incorrectReprojection) { candidateChance += 1.f;}
-                    candidateChance = min(1.f, max(0.f, candidateChance));
-
-                    targetSampleCount += candidateChance;
-                }
+                // Write background pixels.
+                writeBackground(pixel, cameraRay.dir);
+                return;
             }
-        }
 
-        // Determine RIS generation pattern
-        uint generationPattern = 0xFFFFFFFF;
-        float referenceSampleCount = float(kAdaptiveTileSize) * float(kAdaptiveTileSize);
-        // if (targetSampleCount < referenceSampleCount * 0.0625f)
-        // {
-        //     generationPattern = gPatternOneSixteenth;
-        // }
-        // else if (targetSampleCount < referenceSampleCount * 0.125f)
-        // {
-        //     generationPattern = gPatternOneEight;
-        // }
-        // else if (targetSampleCount < referenceSampleCount * 0.25f)
-        // {
-        //     generationPattern = gPatternQuarter;
-        // }
-        // else if (targetSampleCount < referenceSampleCount * 0.5f)
-        // {
-        //     generationPattern = gPatternHalf;
-        // }
-        // else if (targetSampleCount < referenceSampleCount * 0.75f)
-        // {
-        //     generationPattern = gPatternThreeQuarters;
-        // }
+            // Determine if current pixel needs to generate new RIS candidate using temporal data
+            PathReservoir temporalReservoir;
+            uint prevPixelOffset;
+            bool validTemporalReservoir = true;
+            bool disoccluded;
+            bool incorrectReprojection = false;
+            bool specularOrTransmissiveMaterials = false;
+            var sg = TinyUniformSampleGenerator(pixel, (kCandidateSamples + 1 + 1) * params.seed + kCandidateSamples);
+            { 
+                float2 motionVector = motionVectors[pixel];
+                int2 prevPixel = pixel;
 
-        if (targetSampleCount < referenceSampleCount * 0.125f)
-        {
-            generationPattern = gPatternOneSixteenth;
-        }
-        else if (targetSampleCount < referenceSampleCount * 0.25f)
-        {
-            generationPattern = gPatternOneEight;
-        }
-        else if (targetSampleCount < referenceSampleCount * 0.5f)
-        {
-            generationPattern = gPatternQuarter;
-        }
-        else if (targetSampleCount < referenceSampleCount * 0.75f)
-        {
-            generationPattern = gPatternHalf;
-        }
-        else if (targetSampleCount < referenceSampleCount)
-        {
-            generationPattern = gPatternThreeQuarters;
-        }
+                bool foundTemporalSurface = true;
 
-        // Fill in local PathID buffers
-        uint RISCount = 0;
-        uint NonRISCount = 0;
-        uint RISIDs[256] = {};    // init to zeros
-        uint NonRISIDs[256] = {}; // init to zeros
+                if (gEnableTemporalReprojection)
+                {
+                    prevPixel = pixel + motionVector * params.frameDim + (sampleNext2D(sg) * 1.f - 0.f);
+                }
 
-        for (int i = 0; i < kAdaptiveTileSize; i++)
-        {
-            for (int j = 0; j < kAdaptiveTileSize; j++)
+                if (!isValidScreenRegion(prevPixel) || !foundTemporalSurface) { validTemporalReservoir = false; }
+
+                PackedHitInfo centralPrimaryHitPacked;
+                ShadingData centralPrimarySd = getPixelShadingData(pixel, centralPrimaryHitPacked);
+
+                PackedHitInfo temporalPrimaryHitPacked;
+                ShadingData temporalPrimarySd = getPixelTemporalShadingData(prevPixel, temporalPrimaryHitPacked);
+                if (!isValidPackedHitInfo(temporalPrimaryHitPacked)) { validTemporalReservoir = false; }
+
+                prevPixelOffset = params.getReservoirOffset(prevPixel);
+                temporalReservoir = temporalReservoirs[prevPixelOffset];
+
+                // Disocclusion handling
+                float3 cameraPosW = gScene.camera.getPosition(false);
+                float distanceCurrent = length(abs(centralPrimarySd.posW - cameraPosW));
+                float distancePrev = length(abs(temporalPrimarySd.posW - cameraPosW));
+                disoccluded = distanceCurrent / distancePrev > 1.01f;
+
+                // Incorrect Reprojection handling
+                float3 temporalColor = temporalReservoir.F * temporalReservoir.weight;
+                incorrectReprojection = temporalColor.r + temporalColor.b + temporalColor.g < 0.0001f;
+
+                // Handle Specular and Transmissive materials
+                specularOrTransmissiveMaterials = any(temporalPrimarySd.transmission > 0.f) || any(temporalPrimarySd.specular > 0.7f);
+            }
+
+            // generation duplication scores for firefly supression inspired by ReSTIR PT Enhanced paper
+            static groupshared uint reservoirConfidenceWeights[256];
+            reservoirConfidenceWeights[threadIdx % 256] = temporalReservoir.rcRandomSeed;
+            GroupMemoryBarrierWithGroupSync();
+            float duplicationScore = -1.f / 255.f;
+            for (int i = 0; i < 256; i++)
             {
-                const uint2 pixel = startingPixel + uint2(i, j);
-
-                const HitInfo hit = HitInfo(vbuffer[pixel]);
-                bool hitSurface = hit.isValid();
-                if (!hitSurface && gSampleId == 0)
-                    continue;
-
-                uint mortonIdx = interleave_16bit(pixel) % 16;
-                uint patternMask = 1 << (15 - mortonIdx);
-                bool RISCandidate = ((generationPattern >> gPatternShift) & patternMask) != 0;
-
-                uint pathID = (1U << 24) | (pixel.y << 12) | pixel.x;
-                if (RISCandidate)
-                {
-                    RISIDs[RISCount] = pathID;
-                    RISCount++;
-                }
-                else
-                {
-                    NonRISIDs[NonRISCount] = pathID;
-                    NonRISCount++;
-                }
+                if (temporalReservoir.rcRandomSeed == reservoirConfidenceWeights[i]) { duplicationScore += 1.f / 255.f; }
             }
-        }
+            gDuplicationMap[pixel.x + pixel.y * params.frameDim.x] = duplicationScore;
 
-        // Write PathIDs to memory
-        uint bufferOffset;
-        InterlockedAdd(gRISPathIDs[0], RISCount, bufferOffset);
-        bufferOffset++;
-        GroupMemoryBarrierWithGroupSync();
-        for (int i = 0; i < RISCount; i++)
-        {
-            gRISPathIDs[bufferOffset + i] = RISIDs[i];
-        }
+            // Calculate chance of generating new samples [0,inf)
+            float candidateChance = 1.f - easingFunction(min(gAdaptiveTemporalHistoryCap, temporalReservoir.M) / gAdaptiveTemporalHistoryCap);
+            if (specularOrTransmissiveMaterials) { candidateChance = max(0.5f, candidateChance); }
+            if (!validTemporalReservoir || disoccluded || incorrectReprojection) { candidateChance = 1.0f; }
+            candidateChance += duplicationScore;
+            candidateChance = min(1.0f, max(0.0625f, candidateChance));
 
-        InterlockedAdd(gNonRISPathIDs[0], NonRISCount, bufferOffset);
-        bufferOffset++;
-        GroupMemoryBarrierWithGroupSync();
-        for (int i = 0; i < NonRISCount; i++)
-        {
-            gNonRISPathIDs[bufferOffset + i] = NonRISIDs[i];
+            // Determine generationPattern
+            static groupshared uint generationPattern;
+            static groupshared uint candidateChances[256];
+            candidateChances[threadIdx % 256] = candidateChance;
+            GroupMemoryBarrierWithGroupSync();
+            if (threadIdx % 256 == 0)
+            {
+                float targetCandidateCount = 0.f;
+                for (int i = 0; i < 256; i++) { targetCandidateCount += candidateChances[i]; }
+                generationPattern = determineGenerationPattern(targetCandidateCount);
+            }
+            GroupMemoryBarrierWithGroupSync();
+
+            uint mortonIdx = threadIdx % 16; // pixel index in 4x4 morton-order grid
+            uint patternMask = 1 << (15 - mortonIdx);
+            bool RISPixel = ((generationPattern >> gPatternShift) & patternMask) != 0 || sampleNext1D(sg) <= candidateChance || duplicationScore >= 0.015f;
+
+            // Write pathID to gRISPathIDs buffer for each RIS candidate pixel using prefix sum
+            uint prefixSum = WavePrefixCountBits(RISPixel);
+            uint generateCount = WaveActiveCountBits(RISPixel);
+
+            uint bufferOffset;
+            if (WaveIsFirstLane())
+            {
+                InterlockedAdd(gRISPathIDs[0], generateCount, bufferOffset);
+            }
+            bufferOffset = WaveReadLaneFirst(bufferOffset) + 1;
+            bufferOffset += prefixSum;
+            GroupMemoryBarrierWithGroupSync();
+            if (RISPixel)
+            {
+                gRISPathIDs[bufferOffset] = (1U << 24) | (pixel.y << 12) | pixel.x; // pathID stores 8 bit sample count, 12 bit y, 12 bit x in this order
+            }
+
+            GroupMemoryBarrierWithGroupSync();
+            gPixelCandidateStatus[pixel.x + pixel.y * params.frameDim.x] = RISPixel ? 1u : 0u;
         }
     }
 
@@ -322,13 +291,14 @@ struct PathGenerator
 cbuffer CB
 {
     PathGenerator gPathGenerator;
-    uint kAdaptiveTileSize;
 }
 
-[numthreads(16, 16, 1)]
+// TODO: Replace by compile-time uint2 constant when it works in Slang.
+// See related issue https://gitlab-master.nvidia.com/nvresearch-gfx/Tools/slang/-/issues/87
+[numthreads(256 /* kScreenTileDim.x * kScreenTileDim.y */, 1, 1)]
 void main(
-    uint3 dispatchThreadId: SV_DispatchThreadID)
+    uint3 groupID: SV_GroupID,
+    uint3 groupThreadID: SV_GroupThreadID)
 {
-    uint2 startingPixel = dispatchThreadId.xy * kAdaptiveTileSize;
-    gPathGenerator.execute(startingPixel);
+    gPathGenerator.execute(groupID.xy, groupThreadID.x);
 }

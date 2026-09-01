@@ -46,14 +46,13 @@ struct PathReusePass
 
     // Adaptive ReSTIR
     Buffer<uint> gRISPathIDs;
-    Buffer<uint> gNonRISPathIDs;
+    Buffer<uint> gPixelCandidateStatus;
     RWBuffer<float> gDuplicationMap;
 
     uint gPatternShift;      // Amount of bits to shift right to access the right RIS candidate pattern for current frame
     uint gGenerationPattern; // uint encoding for which pixels are RIS candidates within a 4x4 grid, contains patterns for two subsequent frames
 
     bool gUsePathIDBuffers;
-    bool gReprojectionPass;
 
     bool gAdaptiveTemporalReuse;
     float gAdaptiveTemporalHistoryCap;
@@ -128,7 +127,7 @@ struct PathReusePass
         ShadingData centralPrimarySd = getPixelShadingData(pixel, centralPrimaryHitPacked);
         if (!isValidPackedHitInfo(centralPrimaryHitPacked)) return;
 
-        float3 color = 0.f;
+        float3 color = float3(0.f);
         ReconnectionData dummyRcData;
         dummyRcData.Init();
 
@@ -148,14 +147,7 @@ struct PathReusePass
                 prevPixel = pixel + motionVector * params.frameDim + (sampleNext2D(sg) * 1.f - 0.f);
             }
 
-            if (!isValidScreenRegion(prevPixel) || !foundTemporalSurface)
-            {
-                float3 color = float3(0.f);
-                color.r = 100000.0f;
-                outputColor[pixel] = float4(color / kSamplesPerPixel, 1.f);
-                
-                return;
-            }
+            if (!isValidScreenRegion(prevPixel) || !foundTemporalSurface) return;
 
             PackedHitInfo temporalPrimaryHitPacked;
             ShadingData temporalPrimarySd = getPixelTemporalShadingData(prevPixel, temporalPrimaryHitPacked);
@@ -254,11 +246,6 @@ struct PathReusePass
                     PathReservoir neighborReservoir;
                     if (i == curSampleId) neighborReservoir = tempDstReservoir;
                     else neighborReservoir = temporalReservoir;
-
-                    if (reproject)
-                    {
-                        dstReservoir.init();
-                    }
 
                     mergeReservoirWithResamplingMIS(params, tempDstReservoir.F, dstJacobian, dstReservoir, tempDstReservoir, neighborReservoir, sg, false, misWeight);
                 }
@@ -375,36 +362,13 @@ struct PathReusePass
         {
             uint mortonIdx = interleave_16bit(pixel) % 16;
             uint patternMask = 1 << (15 - mortonIdx);
-            bool reproject = ((gGenerationPattern >> gPatternShift) & patternMask) == 0;
-            ReSTIR(pixel, reproject && gAdaptiveTemporalReuse);
+            bool reprojectionPixel = ((gGenerationPattern >> gPatternShift) & patternMask) == 0;
 
+            ReSTIR(pixel, reprojectionPixel && gAdaptiveTemporalReuse);
             return;
         }
 
-        uint2 frameDim = gPathTracer.params.frameDim;
-        uint pathIDIndex = 1 + pixel.x + (pixel.y * frameDim.x);
-        if (gReprojectionPass)
-        {
-            if (pathIDIndex > gNonRISPathIDs[0]) return;
-
-            uint pathID = gNonRISPathIDs[pathIDIndex];
-            pathID &= 0x00FFFFFF;
-            pixel.x = pathID & 0xfff;
-            pixel.y = pathID >> 12;
-
-            ReSTIR(pixel, true);
-        }
-        else
-        {
-            if (pathIDIndex > gRISPathIDs[0]) return;
-
-            uint pathID = gRISPathIDs[pathIDIndex];
-            pathID &= 0x00FFFFFF;
-            pixel.x = pathID & 0xFFF;
-            pixel.y = pathID >> 12;
-
-            ReSTIR(pixel, false);
-        }
+        ReSTIR(pixel, gPixelCandidateStatus[pixel.x + (pixel.y * params.frameDim.x)] == 0);
     }
 };
 

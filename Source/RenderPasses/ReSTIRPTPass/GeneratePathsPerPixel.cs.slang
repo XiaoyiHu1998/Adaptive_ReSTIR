@@ -55,7 +55,8 @@ struct PathGenerator
     RWStructuredBuffer<PathReservoir> temporalReservoirs; // reservoir from previous frame
 
     RWBuffer<uint> gRISPathIDs;
-    RWBuffer<uint> gNonRISPathIDs;
+    RWBuffer<uint> gPixelCandidateStatus;
+    RWBuffer<uint> gNonRISFrameCounters;
     RWBuffer<float> gDuplicationMap;
 
     int gSampleId;
@@ -199,33 +200,26 @@ struct PathGenerator
                 }
             }
 
-            // Detect Fireflies according to ReSTIR PT Enhanced paper
-            float duplicationScore = 0.f;
-            if (gEnableDuplicationMapping)
-            {
-                // Handle Fireflies according to ReSTIR PT Enhanced paper
-                float sameReservoirSeeds = 0.f;
-                for (int i = -8; i < 9; i++)
-                {
-                    for (int j = -8; j < 9; j++)
-                    {
-                        uint2 neighbourPixel = pixel + uint2(i, j);
-                        if (any(neighbourPixel > params.frameDim) || any(neighbourPixel < uint2(0, 0)) || (i == 0 & j == 0))
-                            continue;
+            static groupshared uint reservoirConfidenceWeights[256];
+            reservoirConfidenceWeights[threadIdx % 256] = temporalReservoir.rcRandomSeed;
+            GroupMemoryBarrierWithGroupSync();
 
-                        uint neighbourOffset = params.getReservoirOffset(neighbourPixel);
-                        if (temporalReservoir.rcRandomSeed == temporalReservoirs[neighbourOffset].rcRandomSeed)
-                            sameReservoirSeeds += 1.0f;
-                    }
-                }
-                duplicationScore = sameReservoirSeeds / 288.f;
-                gDuplicationMap[pixel.x + pixel.y * params.frameDim.x] = duplicationScore;
+            float duplicationScore = -1.f / 255.f;
+            for (int i = 0; i < 256; i++)
+            {
+                if (temporalReservoir.rcRandomSeed == reservoirConfidenceWeights[i]) { duplicationScore += 1.f / 255.f; }
             }
+            gDuplicationMap[pixel.x + pixel.y * params.frameDim.x] = duplicationScore;
+
+            // Check if pixel has gone without new sample for too long
+            uint framesSinceRISCandidate = gNonRISFrameCounters[pixel.x + pixel.y * params.frameDim.x];
+            bool tooLongWithoutRISCandidate = framesSinceRISCandidate >= 15;
+            // bool tooLongWithoutRISCandidate = false;
 
             // Calculate chance of generating new samples [0,inf)
             float candidateChance = 1.f - easingFunction(min(gAdaptiveTemporalHistoryCap, temporalReservoir.M) / gAdaptiveTemporalHistoryCap);
-            if (!validTemporalReservoir || disoccluded || incorrectReprojection) { candidateChance = 1.0f; }
             if (specularOrTransmissiveMaterials) { candidateChance = 0.5f; }
+            if (!validTemporalReservoir || disoccluded || incorrectReprojection || tooLongWithoutRISCandidate) { candidateChance = 1.0f; }
             candidateChance += duplicationScore;
             candidateChance = min(gAdaptiveMaxPerPixelRISRate, max(gAdaptiveMinPerPixelRISRate, candidateChance));
 
@@ -233,9 +227,14 @@ struct PathGenerator
             uint sampleCount = uint(candidateChance / 1.f);
             if (sampleNext1D(sg) <= (candidateChance % 1.f))
                 sampleCount++;
+            sampleCount = min(1, sampleCount);
+            bool generateRIS = sampleCount > 0;
+
+            // Update NonRISFrameTimers
+            gNonRISFrameCounters[pixel.x + pixel.y * params.frameDim.x] = generateRIS ? 0 : framesSinceRISCandidate + 1;
 
             // Write pathID to gRISPathIDs buffer for each RIS candidate pixel using prefix sum
-            bool RISPixel = sampleCount > 0;
+            bool RISPixel = generateRIS;
             uint prefixSum = WavePrefixCountBits(RISPixel);
             uint generateCount = WaveActiveCountBits(RISPixel);
 
@@ -249,27 +248,11 @@ struct PathGenerator
             GroupMemoryBarrierWithGroupSync();
             if (RISPixel)
             {
-                gRISPathIDs[bufferOffset] = (sampleCount << 24) | (pixel.y << 12) | pixel.x; // pathID stores 8 bit sample count, 12 bit y, 12 bit x in this order
+                gRISPathIDs[bufferOffset] = (1U << 24) | (pixel.y << 12) | pixel.x; // pathID stores 8 bit sample count, 12 bit y, 12 bit x in this order
             }
-
-            // Write pathID to gNonRISPathIDs buffer for each non-RIS candidate pixel using prefix sum
-            bool NonRISPixel = !RISPixel;
-            prefixSum = WavePrefixCountBits(NonRISPixel);
-            generateCount = WaveActiveCountBits(NonRISPixel);
-
-            bufferOffset;
-            if (WaveIsFirstLane())
-            {
-                InterlockedAdd(gNonRISPathIDs[0], generateCount, bufferOffset); // TODO: Remember to reset to 0 later
-            }
-            bufferOffset = WaveReadLaneFirst(bufferOffset) + 1;
-            bufferOffset += prefixSum;
 
             GroupMemoryBarrierWithGroupSync();
-            if (NonRISPixel)
-            {
-                gNonRISPathIDs[bufferOffset] = (pixel.y << 12) | pixel.x;
-            }
+            gPixelCandidateStatus[pixel.x + pixel.y * params.frameDim.x] = RISPixel ? 1u : 0u;
         }
     }
 

@@ -81,7 +81,7 @@ private:
     void generatePathsPerPixel(RenderContext* pRenderContext, const RenderData& renderData, int sampleId = 0);
     void generatePathsTileBased(RenderContext* pRenderContext, const RenderData& renderData, int sampleId = 0);
     void tracePass(RenderContext* pRenderContext, const RenderData& renderData, const ComputePass::SharedPtr& pass, const std::string& passName, int sampleId);
-    void PathReusePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool temporalReuse = false, int spatialRoundId = 0, bool isLastRound = false, bool temporalReproject = false);
+    void PathReusePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool temporalReuse = false, int spatialRoundId = 0, bool isLastRound = false);
     void PathRetracePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool temporalReuse = false, int spatialRoundId = 0);
     Texture::SharedPtr createNeighborOffsetTexture(uint32_t sampleCount);
 
@@ -185,7 +185,7 @@ private:
 
     // params below
     bool                            mEnableTemporalReuse = false;
-    bool                            mEnableSpatialReuse = false;
+    bool                            mEnableSpatialReuse = true;
     SpatialReusePattern             mSpatialReusePattern = SpatialReusePattern::Default;
     PathReusePattern                mPathReusePattern = PathReusePattern::NRooksShift;
     uint32_t                        mSmallWindowRestirWindowRadius = 2;
@@ -223,19 +223,20 @@ private:
     };
 
     // Per Pixel
-    bool mEnableAdaptiveRISPerPixel = true;
+    bool mEnableAdaptiveRISPerPixel = false;
     float mAdaptiveMinPerPixelRISRate = 0.025f;
     float mAdaptiveMaxPerPixelRISRate = 1.0f;
+    std::vector<uint> mNonRISFrameCountersData = std::vector<uint>(3840 * 2160, 0u);
+    Buffer::SharedPtr mNonRISFrameCounters = Buffer::create(mNonRISFrameCountersData.size() * sizeof(uint), ResourceBindFlags::UnorderedAccess, Buffer::CpuAccess::Read, mNonRISFrameCountersData.data());
 
     // Tile-Based
-    bool mEnableAdaptiveRISTileBased = false;
-    uint mAdaptiveTileSize = 16;
+    bool mEnableAdaptiveRISTileBased = true;
 
     // Buffers
     std::vector<uint> mRISPathIDsData = std::vector<uint>(3840 * 2160, 0u);
-    std::vector<uint> mNonRISPathIDsData = std::vector<uint>(3840 * 2160, 0u);
+    std::vector<uint> mPixelCandidateStatusData = std::vector<uint>(3840 * 2160, 0u);
     Buffer::SharedPtr mRISPathIDs = Buffer::create(mRISPathIDsData.size() * sizeof(uint), ResourceBindFlags::UnorderedAccess, Buffer::CpuAccess::Read, mRISPathIDsData.data());
-    Buffer::SharedPtr mNonRISPathIDs = Buffer::create(mNonRISPathIDsData.size() * sizeof(uint), ResourceBindFlags::UnorderedAccess, Buffer::CpuAccess::Read, mNonRISPathIDsData.data());
+    Buffer::SharedPtr mPixelCandidateStatus = Buffer::create(mPixelCandidateStatusData.size() * sizeof(uint), ResourceBindFlags::UnorderedAccess, Buffer::CpuAccess::Read, mPixelCandidateStatusData.data());
 
     // Adaptive Temporal Reuse
     bool mEnableAdaptiveTemporalReuse = true;

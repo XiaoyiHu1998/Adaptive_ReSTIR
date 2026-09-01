@@ -14,7 +14,6 @@ ParameterBlock<PathTracer> gPathTracer;
 
 // Adaptive ReSTIR
 Buffer<uint> gRISPathIDs;
-RWBuffer<uint> gNonRISPathIDs;
 RWTexture2D<float4> outputColor;                    ///< Output color buffer if kSamplesPerPixel == 1.
 RWStructuredBuffer<PathReservoir> outputReservoirs; // reservoir for next pass
 

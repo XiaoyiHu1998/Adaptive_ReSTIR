@@ -48,12 +48,12 @@ struct PathGenerator
     Texture2D<PackedHitInfo> vbuffer; ///< Fullscreen V-buffer for the primary hits.
     RWTexture2D<float4> outputColor;  ///< Output color buffer if kSamplesPerPixel == 1.
     RWStructuredBuffer<PathReservoir> outputReservoirs; // reservoir for next pass
-    
+
     RWBuffer<uint> gRISPathIDs;
     RWBuffer<uint> gNonRISPathIDs;
 
     int gSampleId;
-    uint gPatternShift; // Amount of bits to shift right to access the right RIS candidate pattern for current frame
+    uint gPatternShift;      // Amount of bits to shift right to access the right RIS candidate pattern for current frame
     uint gGenerationPattern; // uint encoding for which pixels are RIS candidates within a 4x4 grid, contains patterns for two subsequent frames
 
     // Render settings that depend on the scene.
@@ -115,27 +115,8 @@ struct PathGenerator
             GroupMemoryBarrierWithGroupSync();
             if (RISPixel)
             {
-                gRISPathIDs[bufferOffset] = (1U << 24) | (pixel.y << 12) | pixel.x;
+                gRISPathIDs[bufferOffset] = (1U << 24) | (pixel.y << 12) | pixel.x; // pathID stores 8 bit sample count, 12 bit y, 12 bit x in this order
             }
-
-            // Write pathID to gNonRISPathIDs buffer for each non-RIS candidate pixel using prefix sum
-            // bool NonRISPixel = !RISPixel;
-            // prefixSum = WavePrefixCountBits(NonRISPixel);
-            // generateCount = WaveActiveCountBits(NonRISPixel);
-
-            // bufferOffset;
-            // if (WaveIsFirstLane())
-            // {
-            //     InterlockedAdd(gNonRISPathIDs[0], generateCount, bufferOffset); // TODO: Remember to reset to 0 later
-            // }
-            // bufferOffset = WaveReadLaneFirst(bufferOffset) + 1;
-            // bufferOffset += prefixSum;
-
-            // GroupMemoryBarrierWithGroupSync();
-            // if (NonRISPixel)
-            // {
-            //     gNonRISPathIDs[bufferOffset] = (pixel.y << 12) | pixel.x;
-            // }
         }
     }
 

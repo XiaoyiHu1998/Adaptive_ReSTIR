@@ -546,7 +546,6 @@ struct PathReusePass
                 color += directLighting[pixel].rgb;
                 if (any(isnan(color) || isinf(color))) color = 0.f;
             }
-
             outputColor[pixel] = float4(color / kSamplesPerPixel, 1.f);
 
             // Output Denoiser Data (developed for NRD v2.12, doesn't guarantee to work with the latest version)
