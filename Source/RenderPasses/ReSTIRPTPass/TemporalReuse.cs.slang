@@ -49,7 +49,7 @@ struct PathReusePass
     Buffer<uint> gPixelCandidateStatus;
     RWBuffer<float> gDuplicationMap;
 
-    uint gPatternShift;      // Amount of bits to shift right to access the right RIS candidate pattern for current frame
+    // uint gPatternShift;      // Amount of bits to shift right to access the right RIS candidate pattern for current frame
     uint gGenerationPattern; // uint encoding for which pixels are RIS candidates within a 4x4 grid, contains patterns for two subsequent frames
 
     bool gUsePathIDBuffers;
@@ -362,7 +362,7 @@ struct PathReusePass
         {
             uint mortonIdx = interleave_16bit(pixel) % 16;
             uint patternMask = 1 << (15 - mortonIdx);
-            bool reprojectionPixel = ((gGenerationPattern >> gPatternShift) & patternMask) == 0;
+            bool reprojectionPixel = (gGenerationPattern & patternMask) == 0;
 
             ReSTIR(pixel, reprojectionPixel && gAdaptiveTemporalReuse);
             return;

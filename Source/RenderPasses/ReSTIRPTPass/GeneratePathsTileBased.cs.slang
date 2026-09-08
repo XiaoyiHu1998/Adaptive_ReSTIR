@@ -59,11 +59,13 @@ struct PathGenerator
     RWBuffer<float> gDuplicationMap;
 
     int gSampleId;
-    uint gPatternShift;
+    // uint gPatternShift;
     bool gEnableTemporalReprojection;
     float gAdaptiveTemporalHistoryCap;
-    
+
     bool gEnableDuplicationMapping;
+
+    uint gMinRate;
 
     uint gPatternOneSixteenth;
     uint gPatternOneEight;
@@ -116,19 +118,19 @@ struct PathGenerator
 
     uint determineGenerationPattern(float targetCandidateCount)
     {
-        // if (targetCandidateCount <= 256.f * 0.0625f)
-        //     return gPatternOneSixteenth;
+        if (targetCandidateCount <= 256.f * 0.0625f && gMinRate >= 5)
+            return gPatternOneSixteenth;
 
-        if (targetCandidateCount <= 256.f * 0.125f)
+        if (targetCandidateCount <= 256.f * 0.125f && gMinRate >= 4)
             return gPatternOneEight;
 
-        if (targetCandidateCount <= 256.f * 0.25f)
+        if (targetCandidateCount <= 256.f * 0.25f && gMinRate >= 3)
             return gPatternQuarter;
 
-        if (targetCandidateCount <= 256.f * 0.50f)
+        if (targetCandidateCount <= 256.f * 0.50f && gMinRate >= 2)
             return gPatternHalf;
 
-        if (targetCandidateCount <= 256.f * 0.75f)
+        if (targetCandidateCount <= 256.f * 0.75f && gMinRate >= 1)
             return gPatternThreeQuarters;
 
         return 0xFFFFFFFF;
@@ -247,7 +249,7 @@ struct PathGenerator
 
             uint mortonIdx = threadIdx % 16; // pixel index in 4x4 morton-order grid
             uint patternMask = 1 << (15 - mortonIdx);
-            bool RISPixel = ((generationPattern >> gPatternShift) & patternMask) != 0 || sampleNext1D(sg) <= candidateChance || duplicationScore >= 0.015f;
+            bool RISPixel = (generationPattern & patternMask) != 0 || sampleNext1D(sg) <= candidateChance || duplicationScore >= 0.015f;
 
             // Write pathID to gRISPathIDs buffer for each RIS candidate pixel using prefix sum
             uint prefixSum = WavePrefixCountBits(RISPixel);

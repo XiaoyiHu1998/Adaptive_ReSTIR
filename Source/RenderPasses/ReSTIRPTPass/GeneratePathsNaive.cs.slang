@@ -50,10 +50,9 @@ struct PathGenerator
     RWStructuredBuffer<PathReservoir> outputReservoirs; // reservoir for next pass
 
     RWBuffer<uint> gRISPathIDs;
-    RWBuffer<uint> gNonRISPathIDs;
 
     int gSampleId;
-    uint gPatternShift;      // Amount of bits to shift right to access the right RIS candidate pattern for current frame
+    // uint gPatternShift;      // Amount of bits to shift right to access the right RIS candidate pattern for current frame
     uint gGenerationPattern; // uint encoding for which pixels are RIS candidates within a 4x4 grid, contains patterns for two subsequent frames
 
     // Render settings that depend on the scene.
@@ -99,7 +98,7 @@ struct PathGenerator
             // Determine if RIS candidate needs to be generated 4x4 grid
             uint mortonIdx = threadIdx % 16; // pixel index in 4x4 morton-order grid
             uint patternMask = 1 << (15 - mortonIdx);
-            bool RISPixel = ((gGenerationPattern >> gPatternShift) & patternMask) != 0;
+            bool RISPixel = (gGenerationPattern & patternMask) != 0;
 
             // Write pathID to gRISPathIDs buffer for each RIS candidate pixel using prefix sum
             uint prefixSum = WavePrefixCountBits(RISPixel);

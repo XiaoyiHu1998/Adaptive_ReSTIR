@@ -30,6 +30,13 @@ namespace Falcor
         OneEigth,
         OneSixteenth
     };
+
+    enum class AdaptiveRIS
+    {
+        Naive,
+        PerPixel,
+        TileBased
+    };
 }
 
 /** Path tracer that uses TraceRayInline() in DXR 1.1.
@@ -210,10 +217,12 @@ private:
     bool mResetRenderPassFlags = false;
 
     // Adaptive RIS Path Generation
+    bool mEnableAdaptiveRIS = true;
+    AdaptiveRIS mAdaptiveRISScheme = AdaptiveRIS::TileBased;
+
     // Naive
-    bool mEnableAdaptiveRISNaive = false;
     uint mSamplingRateRIS = 3;
-    uint mPatterns[6][8] = { //4x4 grid generation patterns
+    uint mPatterns[6][8] = { //4x4 grid generation patterns, each uint encodes generation patterns for two subsequent frames
         {0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU}, // Full
         {0x7777BBBBU, 0xDDDDEEEEU, 0x7777BBBBU, 0xDDDDEEEEU, 0x7777BBBBU, 0xDDDDEEEEU, 0x7777BBBBU, 0xDDDDEEEEU}, // 3/4
         {0x99996666U, 0x99996666U, 0x99996666U, 0x99996666U, 0x99996666U, 0x99996666U, 0x99996666U, 0x99996666U}, // 1/2
@@ -223,14 +232,13 @@ private:
     };
 
     // Per Pixel
-    bool mEnableAdaptiveRISPerPixel = false;
     float mAdaptiveMinPerPixelRISRate = 0.025f;
     float mAdaptiveMaxPerPixelRISRate = 1.0f;
     std::vector<uint> mNonRISFrameCountersData = std::vector<uint>(3840 * 2160, 0u);
     Buffer::SharedPtr mNonRISFrameCounters = Buffer::create(mNonRISFrameCountersData.size() * sizeof(uint), ResourceBindFlags::UnorderedAccess, Buffer::CpuAccess::Read, mNonRISFrameCountersData.data());
 
     // Tile-Based
-    bool mEnableAdaptiveRISTileBased = true;
+    uint mAdaptiveRISTileBasedMinRate = 4;
 
     // Buffers
     std::vector<uint> mRISPathIDsData = std::vector<uint>(3840 * 2160, 0u);

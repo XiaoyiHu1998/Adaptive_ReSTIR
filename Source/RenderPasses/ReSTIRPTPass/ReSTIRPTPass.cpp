@@ -142,6 +142,13 @@ namespace
         { (uint32_t)PathSamplingMode::PathTracing, "Path Tracing" }
     };
 
+    const Gui::DropdownList kAdaptiveRIS =
+    {
+        {(uint)AdaptiveRIS::Naive, "Naive"},
+        {(uint)AdaptiveRIS::PerPixel, "Per-Pixel"},
+        {(uint)AdaptiveRIS::TileBased, "Tile-Based"}
+    };
+
     // Adaptive ReSTIR Naive Generation Scheme
     const Gui::DropdownList kSamplingRateRIS =
     {
@@ -753,15 +760,15 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
 
                 if (restir_i == 0)
                 {
-                    if (mEnableAdaptiveRISNaive || (!mEnableAdaptiveRISPerPixel && !mEnableAdaptiveRISTileBased))
+                    if (!mEnableAdaptiveRIS || mAdaptiveRISScheme == AdaptiveRIS::Naive)
                     {
                         generatePathsNaive(pRenderContext, renderData, 0);
                     }
-                    else if(mEnableAdaptiveRISPerPixel)
+                    else if (mAdaptiveRISScheme == AdaptiveRIS::PerPixel)
                     {
                         generatePathsPerPixel(pRenderContext, renderData, 0);
                     }
-                    else if (mEnableAdaptiveRISTileBased)
+                    else if (mAdaptiveRISScheme == AdaptiveRIS::TileBased)
                     {
                         generatePathsTileBased(pRenderContext, renderData, 0);
                     }
@@ -972,52 +979,32 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
         }
 
         // Adaptive ReSTIR
-        if (widget.checkbox("Adaptive RIS Naive", mEnableAdaptiveRISNaive))
+        dirty |= widget.checkbox("Adaptive RIS", mEnableAdaptiveRIS);
+        if (mEnableAdaptiveRIS)
         {
-            dirty = true;
-            mEnableAdaptiveRISPerPixel = false;
-            mEnableAdaptiveRISTileBased = false;
-        }
-
-        if (mEnableAdaptiveRISNaive)
-        {
-            if (auto group = widget.group("Naive Scheme Parameters", true))
+            if (auto group = widget.group("Adaptive RIS Parameters", true))
             {
-                dirty |= widget.dropdown("Sampling Rate", kSamplingRateRIS, reinterpret_cast<uint32_t&>(mSamplingRateRIS));
-            }
-        }
+                dirty |= widget.dropdown("Scheme", kAdaptiveRIS, reinterpret_cast<uint32_t&>(mAdaptiveRISScheme));
 
-        if (widget.checkbox("Adaptive RIS Per Pixel", mEnableAdaptiveRISPerPixel))
-        {
-            dirty = true;
-            mEnableAdaptiveRISNaive = false;
-            mEnableAdaptiveRISTileBased = false;
-        }
-
-        if (mEnableAdaptiveRISPerPixel)
-        {
-            if (auto group = widget.group("Per Pixel Scheme Parameters", true))
-            {
-                dirty |= widget.var("Min Chance", mAdaptiveMinPerPixelRISRate);
-                dirty |= widget.var("Max Chance", mAdaptiveMaxPerPixelRISRate);
-                dirty |= widget.checkbox("Duplication Mapping", mEnableDuplicationMapping);
-                dirty |= widget.var("Duplication Mapping Alpha", mDuplicationMappingAlpha);
-            }
-        }
-
-        if (widget.checkbox("Adaptive RIS Tile based", mEnableAdaptiveRISTileBased))
-        {
-            dirty = true;
-            mEnableAdaptiveRISNaive = false;
-            mEnableAdaptiveRISPerPixel = false;
-        }
-
-        if (mEnableAdaptiveRISTileBased)
-        {
-            if (auto group = widget.group("Tile Based Scheme Parameters", true))
-            {
-                dirty |= widget.checkbox("Duplication Mapping", mEnableDuplicationMapping);
-                dirty |= widget.var("Duplication Mapping Alpha", mDuplicationMappingAlpha);
+                switch (mAdaptiveRISScheme)
+                {
+                case AdaptiveRIS::Naive:
+                    dirty |= widget.dropdown("Sampling Rate", kSamplingRateRIS, reinterpret_cast<uint32_t&>(mSamplingRateRIS));
+                    break;
+                case AdaptiveRIS::PerPixel:
+                    dirty |= widget.var("Min Chance", mAdaptiveMinPerPixelRISRate);
+                    dirty |= widget.var("Max Chance", mAdaptiveMaxPerPixelRISRate);
+                    dirty |= widget.checkbox("Duplication Mapping", mEnableDuplicationMapping);
+                    dirty |= widget.var("Duplication Mapping Alpha", mDuplicationMappingAlpha);
+                    break;
+                case AdaptiveRIS::TileBased:
+                    dirty |= widget.dropdown("Min Tile RIS Rate", kSamplingRateRIS, reinterpret_cast<uint32_t&>(mAdaptiveRISTileBasedMinRate));
+                    dirty |= widget.checkbox("Duplication Mapping", mEnableDuplicationMapping);
+                    dirty |= widget.var("Duplication Mapping Alpha", mDuplicationMappingAlpha);
+                    break;
+                default:
+                    break;
+                }
             }
         }
 
@@ -1758,11 +1745,14 @@ void ReSTIRPTPass::generatePathsNaive(RenderContext* pRenderContext, const Rende
 
     mpGeneratePathsNaive["gScene"] = mpScene->getParameterBlock();
     var["gSampleId"] = sampleId;
-    var["gPatternShift"] = ((mReservoirFrameCount % 16) % 2) ? 0 : 16;
-    var["gGenerationPattern"] = mPatterns[mEnableAdaptiveRISNaive ? mSamplingRateRIS : 0][(mReservoirFrameCount % 16) / 2];
-    var["gRISPathIDs"] = mRISPathIDs->asBuffer();
-    var["gPixelCandidateStatus"] = mPixelCandidateStatus->asBuffer();
     var["outputReservoirs"] = mpOutputReservoirs;
+
+        
+    uint frameSelectionShift = ((mReservoirFrameCount % 16) % 2) ? 0 : 16;
+    uint patternLevel = mEnableAdaptiveRIS ? mSamplingRateRIS : 0;
+    uint pattern = mPatterns[patternLevel][(mReservoirFrameCount % 16) / 2];
+    var["gGenerationPattern"] = pattern >> frameSelectionShift;
+    var["gRISPathIDs"] = mRISPathIDs->asBuffer();
 
     // Launch one thread per pixel.
     // The dimensions are padded to whole tiles to allow re-indexing the threads in the shader.
@@ -1794,6 +1784,7 @@ void ReSTIRPTPass::generatePathsPerPixel(RenderContext* pRenderContext, const Re
     var["gSampleId"] = sampleId;
     var["gRISPathIDs"] = mRISPathIDs->asBuffer();
     var["gPixelCandidateStatus"] = mPixelCandidateStatus->asBuffer();
+    
     var["outputReservoirs"] = mpOutputReservoirs;
     var["temporalReservoirs"] = mpTemporalReservoirs[0];
     var["motionVectors"] = renderData[kInputMotionVectors]->asTexture();
@@ -1838,6 +1829,7 @@ void ReSTIRPTPass::generatePathsTileBased(RenderContext* pRenderContext, const R
     var["gSampleId"] = sampleId;
     var["gRISPathIDs"] = mRISPathIDs->asBuffer();
     var["gPixelCandidateStatus"] = mPixelCandidateStatus->asBuffer();
+    
     var["outputReservoirs"] = mpOutputReservoirs;
     var["temporalReservoirs"] = mpTemporalReservoirs[0];
     var["motionVectors"] = renderData[kInputMotionVectors]->asTexture();
@@ -1845,18 +1837,17 @@ void ReSTIRPTPass::generatePathsTileBased(RenderContext* pRenderContext, const R
     var["gEnableTemporalReprojection"] = mEnableTemporalReprojection;
 
     var["gAdaptiveTemporalHistoryCap"] = mAdaptiveTemporalHistoryCap;
-    // var["gAdaptiveMinPerPixelRISRate"] = mAdaptiveMinPerPixelRISRate;
-    // var["gAdaptiveMaxPerPixelRISRate"] = mAdaptiveMaxPerPixelRISRate;
 
     var["gDuplicationMap"] = mDuplicationMap->asBuffer();
     var["gEnableDuplicationMapping"] = mEnableDuplicationMapping;
-    
-    var["gPatternShift"] = ((mReservoirFrameCount % 16) % 2) ? 0 : 16;
-    var["gPatternThreeQuarters"] = mPatterns[1][(mReservoirFrameCount % 16) / 2];
-    var["gPatternHalf"] = mPatterns[2][(mReservoirFrameCount % 16) / 2];
-    var["gPatternQuarter"] = mPatterns[3][(mReservoirFrameCount % 16) / 2];
-    var["gPatternOneEight"] = mPatterns[4][(mReservoirFrameCount % 16) / 2];
-    var["gPatternOneSixteenth"] = mPatterns[5][(mReservoirFrameCount % 16) / 2];
+
+    uint frameSelectionShift = ((mReservoirFrameCount % 16) % 2) ? 0 : 16;
+    var["gPatternThreeQuarters"] = mPatterns[1][(mReservoirFrameCount % 16) / 2] >> frameSelectionShift;
+    var["gPatternHalf"] = mPatterns[2][(mReservoirFrameCount % 16) / 2] >> frameSelectionShift;
+    var["gPatternQuarter"] = mPatterns[3][(mReservoirFrameCount % 16) / 2] >> frameSelectionShift;
+    var["gPatternOneEight"] = mPatterns[4][(mReservoirFrameCount % 16) / 2] >> frameSelectionShift;
+    var["gPatternOneSixteenth"] = mPatterns[5][(mReservoirFrameCount % 16) / 2] >> frameSelectionShift;
+    var["gMinRate"] = mAdaptiveRISTileBasedMinRate;
 
     // Launch one thread per pixel.
     // The dimensions are padded to whole tiles to allow re-indexing the threads in the shader.
@@ -1949,15 +1940,20 @@ void ReSTIRPTPass::PathReusePass(RenderContext* pRenderContext, uint32_t restir_
     if (isTemporalReuse)
     {
         // Adaptive ReSTIR
-        var["gPatternShift"] = ((mReservoirFrameCount % 16) % 2) ? 0 : 16;
-        var["gGenerationPattern"] = mPatterns[mEnableAdaptiveRISNaive ? mSamplingRateRIS : 0][(mReservoirFrameCount % 16) / 2];
         var["gAdaptiveTemporalReuse"] = mEnableAdaptiveTemporalReuse;
         var["gAdaptiveTemporalHistoryCap"] = mAdaptiveTemporalHistoryCap;
-        var["gUsePathIDBuffers"] = mEnableAdaptiveRISPerPixel || mEnableAdaptiveRISTileBased;
+        
+        uint frameSelectionShift = ((mReservoirFrameCount % 16) % 2) ? 0 : 16;
+        uint patternLevel = mEnableAdaptiveRIS ? mSamplingRateRIS : 0;
+        uint pattern = mPatterns[patternLevel][(mReservoirFrameCount % 16) / 2];
+        var["gGenerationPattern"] = pattern >> frameSelectionShift;
+        
+        var["gUsePathIDBuffers"] = mEnableAdaptiveRIS && (mAdaptiveRISScheme == AdaptiveRIS::PerPixel || mAdaptiveRISScheme == AdaptiveRIS::TileBased);
         var["gRISPathIDs"] = mRISPathIDs->asBuffer();
         var["gPixelCandidateStatus"] = mPixelCandidateStatus->asBuffer();
+        
+        var["gEnableDuplicationMapping"] = mEnableDuplicationMapping && mEnableAdaptiveRIS && (mAdaptiveRISScheme == AdaptiveRIS::PerPixel || mAdaptiveRISScheme == AdaptiveRIS::TileBased);
         var["gDuplicationMap"] = mDuplicationMap->asBuffer();
-        var["gEnableDuplicationMapping"] = mEnableDuplicationMapping && mEnableAdaptiveRISPerPixel;
         var["gDuplicationMappingAlpha"] = mDuplicationMappingAlpha;
 
         var["temporalVbuffer"] = mpTemporalVBuffer;
