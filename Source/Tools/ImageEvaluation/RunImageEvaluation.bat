@@ -1,0 +1,1 @@
+python ImageEvaluation.py H:\ThesisTestOutputs D:\Repositories\Adaptive_ReSTIR\Bin\x64\Release\ImageCompare.exe
