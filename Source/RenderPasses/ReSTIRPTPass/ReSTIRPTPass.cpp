@@ -790,7 +790,7 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
                     if (mStaticParams.shiftStrategy == ShiftMapping::Hybrid)
                         PathRetracePass(pRenderContext, restir_i, renderData, true, 0);
                     // a separate pass to trace rays for hybrid shift/random number replay
-                    PathReusePass(pRenderContext, restir_i, renderData, true, 0, !mEnableSpatialReuse);
+                    PathReusePass(pRenderContext, restir_i, renderData, true, 0, !mEnableSpatialReuse, skipTemporalReuse);
 
                     // Per pixel and Tile based path generation use seperate pass for non RIS candidates
                     // if (mEnableAdaptiveRISPerPixel || mEnableAdaptiveRISTileBased)
@@ -1889,7 +1889,7 @@ void ReSTIRPTPass::tracePass(RenderContext* pRenderContext, const RenderData& re
     pass->execute(pRenderContext, uint3(frameDim, 1u));
 }
 
-void ReSTIRPTPass::PathReusePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool isTemporalReuse, int spatialRoundId, bool isLastRound)
+void ReSTIRPTPass::PathReusePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool isTemporalReuse, int spatialRoundId, bool isLastRound, bool skipTemporalReuse)
 {
     bool isPathReuseMISWeightComputation = spatialRoundId == -1;
 
@@ -1955,6 +1955,8 @@ void ReSTIRPTPass::PathReusePass(RenderContext* pRenderContext, uint32_t restir_
         var["gEnableDuplicationMapping"] = mEnableDuplicationMapping && mEnableAdaptiveRIS && (mAdaptiveRISScheme == AdaptiveRIS::PerPixel || mAdaptiveRISScheme == AdaptiveRIS::TileBased);
         var["gDuplicationMap"] = mDuplicationMap->asBuffer();
         var["gDuplicationMappingAlpha"] = mDuplicationMappingAlpha;
+
+        var["gSkipTemporalReuse"] = skipTemporalReuse;
 
         var["temporalVbuffer"] = mpTemporalVBuffer;
         var["motionVectors"] = renderData[kInputMotionVectors]->asTexture();
