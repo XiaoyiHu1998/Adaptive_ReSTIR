@@ -4,7 +4,8 @@ import os.path as path
 import json
 
 baseDirectory = ""
-subDirectory = ""
+sceneName = ""
+runName = ""
 
 
 def writeJSON(dict: dict, path: str):
@@ -15,20 +16,28 @@ def writeJSON(dict: dict, path: str):
 
 def captureProfilerData(frameCount: int, m):
     assert(baseDirectory is not "")
-    assert(subDirectory is not "")
+    assert(sceneName is not "")
+    assert(runName is not "")
 
     m.profiler.enabled = True
+    m.profiler.paused = False
     m.profiler.startCapture()
     for frame in range(frameCount):
         m.renderFrame()
     capture = m.profiler.endCapture()
     m.profiler.enabled = False
+    m.profiler.paused = True
 
-    pathPrefix = f"{baseDirectory}/ProfilerCapture/{subDirectory}"
-    if not path.exists(pathPrefix):
-        os.mkdir(pathPrefix)
+    sceneDirectory = f"{baseDirectory}/Captures/{sceneName}"
+    runDirectory = f"{baseDirectory}/Captures/{sceneName}/{runName}"
+
+    if not path.exists(sceneDirectory):
+        os.mkdir(sceneDirectory)
+
+    if not path.exists(runDirectory):
+        os.mkdir(runDirectory)
         
-    filepath = f"{pathPrefix}/profilerCapture.json"
+    filepath = f"{runDirectory}/profilerCapture.json"
     if os.path.isfile(filepath):
         os.remove(filepath)
 
@@ -38,19 +47,25 @@ def captureProfilerData(frameCount: int, m):
 # capture list of frames
 def captureFrames(exitFrame: int, frameList: list, m):
     assert(baseDirectory is not "")
-    assert(subDirectory is not "")
+    assert(sceneName is not "")
+    assert(runName is not "")
 
-    directory = f"{baseDirectory}/FrameCapture/{subDirectory}"
-    if not path.exists(directory):
-        os.mkdir(directory)
+    sceneDirectory = f"{baseDirectory}/Captures/{sceneName}"
+    runDirectory = f"{baseDirectory}/Captures/{sceneName}/{runName}"
 
-    files = os.listdir(directory)
+    if not path.exists(sceneDirectory):
+        os.mkdir(sceneDirectory)
+
+    if not path.exists(runDirectory):
+        os.mkdir(runDirectory)
+        
+    files = os.listdir(runDirectory)
     if len(files) > 0:
         for file in files:
-            os.remove(f"{directory}/{file}")
+            os.remove(f"{runDirectory}/{file}")
 
     m.clock.exitFrame = exitFrame
-    m.frameCapture.outputDir = directory
+    m.frameCapture.outputDir = runDirectory
     m.frameCapture.baseFilename = "Mogwai"
     m.frameCapture.addFrames(m.activeGraph, frameList)
 
@@ -58,28 +73,34 @@ def captureFrames(exitFrame: int, frameList: list, m):
 # capture frames while clock is paused
 def captureFramesPaused(frameCount: int, m, targetFrames: list = []):
     assert(baseDirectory is not "")
-    assert(subDirectory is not "")
+    assert(sceneName is not "")
+    assert(runName is not "")
 
-    directory = f"{baseDirectory}/FrameCapture/{subDirectory}"
-    if not path.exists(directory):
-        os.mkdir(directory)
+    sceneDirectory = f"{baseDirectory}/Captures/{sceneName}"
+    runDirectory = f"{baseDirectory}/Captures/{sceneName}/{runName}"
 
-    files = os.listdir(directory)
+    if not path.exists(sceneDirectory):
+        os.mkdir(sceneDirectory)
+
+    if not path.exists(runDirectory):
+        os.mkdir(runDirectory)
+
+    files = os.listdir(runDirectory)
     if len(files) > 0:
         for file in files:
-            os.remove(f"{directory}/{file}")
+            os.remove(f"{runDirectory}/{file}")
 
-    m.frameCapture.outputDir = directory
+    m.frameCapture.outputDir = runDirectory
     m.clock.pause()
 
     if len(targetFrames) == 0:
         for i in range(frameCount):
-            renderFrame()
+            m.renderFrame()
             m.frameCapture.baseFilename = f"Mogwai-{i:04d}"
             m.frameCapture.capture()
     else:
         for i in range(frameCount):
-            renderFrame()
+            m.renderFrame()
             if i in targetFrames:
                 m.frameCapture.baseFilename = f"Mogwai-{i:04d}"
                 m.frameCapture.capture()
@@ -90,13 +111,19 @@ def captureFramesPaused(frameCount: int, m, targetFrames: list = []):
 # Timing Capture
 def captureTiming(m):
     assert(baseDirectory is not "")
-    assert(subDirectory is not "")
+    assert(sceneName is not "")
+    assert(runName is not "")
 
-    directory = f"{baseDirectory}/TimeCapture/{subDirectory}"
-    if not path.exists(directory):
-        os.mkdir(directory)
+    sceneDirectory = f"{baseDirectory}/Captures/{sceneName}"
+    runDirectory = f"{baseDirectory}/Captures/{sceneName}/{runName}"
 
-    filepath = f"{directory}/timingCapture.csv"
+    if not path.exists(sceneDirectory):
+        os.mkdir(sceneDirectory)
+
+    if not path.exists(runDirectory):
+        os.mkdir(runDirectory)
+
+    filepath = f"{runDirectory}/timingCapture.csv"
     if os.path.isfile(filepath):
         os.remove(filepath)
 

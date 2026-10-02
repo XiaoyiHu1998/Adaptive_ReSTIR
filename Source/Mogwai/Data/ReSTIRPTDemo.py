@@ -1,6 +1,6 @@
 from falcor import *
-import os
-
+import os.path as path
+import Data.DataExporter as DE
 
 def render_graph_ReSTIRPT():
     g = RenderGraph("ReSTIRPTPass")
@@ -38,7 +38,39 @@ def render_graph_ReSTIRPT():
 
     return g
 
-graph_ReSTIRPT = render_graph_ReSTIRPT()
 
-m.addGraph(graph_ReSTIRPT)
-m.loadScene('Arcade/Arcade.pyscene')
+def export_scene_data(scenePath: str, graph):
+    m.addGraph(graph)
+
+    m.unloadScene()
+    m.loadScene(scenePath)
+
+    print(f"Exporting data from {scenePath}")
+
+    profilerFrameCount = 101
+    captureFrameCount = 101
+
+    DE.captureProfilerData(profilerFrameCount, m)
+    print(f"captured profiler data for {profilerFrameCount} frames")
+
+    DE.captureFramesPaused(100, m)
+    print(f"captured {captureFrameCount} frames")
+
+    DE.captureTiming(m)
+    print(f"captured timing data for frames")
+    
+    m.removeGraph(graph)
+
+
+graph_ReSTIRPT = render_graph_ReSTIRPT()
+# m.addGraph(graph_ReSTIRPT)
+# m.loadScene("Arcade/Arcade.pyscene")
+# m.loadScene("VeachAjar/VeachAjarAnimated.pyscene")
+
+DE.baseDirectory = "H:/ThesisTestOutputs"
+
+DE.subDirectory = "ReSTIRPTDemoTest_VeachAjar"
+export_scene_data("VeachAjar/VeachAjarAnimated.pyscene", graph_ReSTIRPT)
+
+DE.subDirectory = "ReSTIRPTDemoTest_Arcade"
+export_scene_data("Arcade/Arcade.pyscene", graph_ReSTIRPT)
