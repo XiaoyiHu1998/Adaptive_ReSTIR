@@ -5,6 +5,11 @@ import json
 import sys
 import matplotlib.pyplot as plt
 import statistics as st
+from concurrent.futures import ThreadPoolExecutor
+
+
+def executeImageCompareCall(commandList):
+    return subprocess.run(commandList, capture_output=True, text=True).stdout.strip()
 
 
 def ExportErrorMetrics():
@@ -13,6 +18,12 @@ def ExportErrorMetrics():
 
     capturesPath = path.join(baseFolder, "Captures")
     scenes = [scene for scene in os.listdir(capturesPath) if path.isdir(path.join(capturesPath, scene))]
+
+    runLogDict = dict()
+    runLogDictPath = path.join(capturesPath, "runLogs.json")
+    if path.exists(runLogDictPath):
+        with open(runLogDictPath, "r") as file:
+            runLogDict = json.load(file)
 
     for scene in scenes:
         scenePath = path.join(capturesPath, scene)
@@ -23,8 +34,19 @@ def ExportErrorMetrics():
         referenceFrames = sorted(referenceFrames)
         isAnimatedScene = len(referenceFrames) > 1
 
+        if scene not in runLogDict.keys():
+            runLogDict[scene] = dict()
+
         for run in runs:
             runPath = path.join(scenePath, run)
+
+            if run not in runLogDict[scene].keys():
+                runLogDict[scene][run] = path.getmtime(runPath)
+            else:
+                if runLogDict[scene][run] == path.getmtime(runPath):
+                    print(f"skipped comparing images in {runPath}\t")
+                    continue
+
             print(f"comparing images in {runPath}\t")
 
             runFrames = [path.join(runPath, image) for image in os.listdir(runPath) if image.split(".")[-1] == "png"]
@@ -34,23 +56,44 @@ def ExportErrorMetrics():
             errorsMSE = []
             errorsRMSE = []
             errorsMAPE = []
+            
+            maeCalls = []
+            mseCalls = []
+            rmseCalls = []
+            mapeCalls = []
 
-            print(f"current frame: {runFrames[0]}", end="\r")
+            # print(f"current frame: {runFrames[0]}", end="\r")
             for frameIndex in range(len(runFrames)):
-                print(f"current frame: {runFrames[frameIndex]}", end="\r")
+                # print(f"current frame: {runFrames[frameIndex]}", end="\r")
 
                 runFrame = runFrames[frameIndex]
                 referenceFrame = referenceFrames[frameIndex] if isAnimatedScene else referenceFrames[0]
+
+                # maeCall = [ImageComparePath, "-m", "mae", runFrame, referenceFrame]
+                # mseCall = [ImageComparePath, "-m", "mse", runFrame, referenceFrame]
+                # rmseCall = [ImageComparePath, "-m", "rmse", runFrame, referenceFrame]
+                # mapeCall = [ImageComparePath, "-m", "mape", runFrame, referenceFrame]
+
+                # errorsMAE.append(subprocess.run(maeCall, capture_output=True, text=True).stdout.strip())
+                # errorsMSE.append(subprocess.run(mseCall, capture_output=True, text=True).stdout.strip())
+                # errorsRMSE.append(subprocess.run(rmseCall, capture_output=True, text=True).stdout.strip())
+                # errorsMAPE.append(subprocess.run(mapeCall, capture_output=True, text=True).stdout.strip())
 
                 maeCall = [ImageComparePath, "-m", "mae", runFrame, referenceFrame]
                 mseCall = [ImageComparePath, "-m", "mse", runFrame, referenceFrame]
                 rmseCall = [ImageComparePath, "-m", "rmse", runFrame, referenceFrame]
                 mapeCall = [ImageComparePath, "-m", "mape", runFrame, referenceFrame]
 
-                errorsMAE.append(subprocess.run(maeCall, capture_output=True, text=True).stdout.strip())
-                errorsMSE.append(subprocess.run(mseCall, capture_output=True, text=True).stdout.strip())
-                errorsRMSE.append(subprocess.run(rmseCall, capture_output=True, text=True).stdout.strip())
-                errorsMAPE.append(subprocess.run(mapeCall, capture_output=True, text=True).stdout.strip())
+                maeCalls.append(maeCall)
+                mseCalls.append(mseCall)
+                rmseCalls.append(rmseCall)
+                mapeCalls.append(mapeCall)
+
+            with ThreadPoolExecutor(max_workers=16) as executor:
+                errorsMAE = list(executor.map(executeImageCompareCall, maeCalls))
+                errorsMSE = list(executor.map(executeImageCompareCall, mseCalls))
+                errorsRMSE = list(executor.map(executeImageCompareCall, rmseCalls))
+                errorsMAPE = list(executor.map(executeImageCompareCall, mapeCalls))
 
             exportDict = dict()
             exportDict["frameCount"] = len(runFrames)
@@ -63,6 +106,9 @@ def ExportErrorMetrics():
                 file.write(json.dumps(exportDict))
 
             print(f"exported frame error data to {path.join(runPath, "errors.json")}\t")
+
+    with open(runLogDictPath, "w+") as file:
+        file.write(json.dumps(runLogDict))
 
     print("Finished exporting frame error data\t\n")
 
@@ -90,6 +136,8 @@ def ExportAverageErrorMetrics():
 
             if scene not in dataDict.keys():
                 dataDict[scene] = dict()
+
+            if restirScheme not in dataDict[scene].keys():
                 dataDict[scene][restirScheme] = [errorDict]
             else:
                 dataDict[scene][restirScheme].append(errorDict)
@@ -162,15 +210,17 @@ def ExportAverageProfilerData():
             runPath = path.join(scenePath, run)
             restirScheme = run.split("_")[0]
 
-            errorDict = dict()
+            profilerDict = dict()
             with open(path.join(runPath, "profilerCapture.json"), "r") as file:
-                errorDict = json.load(file)
+                profilerDict = json.load(file)
 
             if scene not in dataDict.keys():
                 dataDict[scene] = dict()
-                dataDict[scene][restirScheme] = [errorDict]
+
+            if restirScheme not in dataDict[scene].keys():
+                dataDict[scene][restirScheme] = [profilerDict]
             else:
-                dataDict[scene][restirScheme].append(errorDict)
+                dataDict[scene][restirScheme].append(profilerDict)
 
     exportDict = dict()
     for scene in dataDict.keys():
@@ -313,7 +363,7 @@ def ExportGraphs():
 
 
 def main():
-    # ExportErrorMetrics()
+    ExportErrorMetrics()
     ExportAverageErrorMetrics()
     ExportAverageProfilerData()
     ExportGraphs()
