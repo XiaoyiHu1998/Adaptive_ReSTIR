@@ -48,6 +48,7 @@ def ExportErrorMetrics():
                     continue
 
             print(f"comparing images in {runPath}\t")
+            runLogDict[scene][run] = path.getmtime(runPath)
 
             runFrames = [path.join(runPath, image) for image in os.listdir(runPath) if image.split(".")[-1] == "png"]
             runFrames = sorted(runFrames)
@@ -260,6 +261,22 @@ def ExportAverageProfilerData():
     print("Exported average profiler data\t\n")
 
 
+def naiveSchemeToGraphLabel(restirScheme):
+    match restirScheme:
+        case "Naive - ThreeQuarters":
+            return "Naive - 3/4"
+        case "Naive - Half":
+            return "Naive - 1/2"
+        case "Naive - Quarter":
+            return "Naive - 1/4"
+        case "Naive - OneEighth":
+            return "Naive - 1/8"
+        case "Naive - OneSixteenth":
+            return "Naive - 1/16"
+        case _:
+            return restirScheme
+
+
 def ExportGraphs():
     baseFolder = sys.argv[1]
     # ImageComparePath = sys.argv[2]
@@ -327,17 +344,18 @@ def ExportGraphs():
     # Export figures
     print("Generating graphs")
     for scene in graphsDict.keys():
-        restirSchemes = graphsDict[scene].keys()
+        restirSchemes = sorted(graphsDict[scene].keys())
 
         # Frametime graph
         fig, ax = plt.subplots()
 
         for restirScheme in restirSchemes:
             cumulativeFrameTimes, frametimes = graphsDict[scene][restirScheme]["frametimes"]
-            ax.plot(cumulativeFrameTimes, frametimes, label=restirScheme)
+            ax.plot(cumulativeFrameTimes, frametimes, label=naiveSchemeToGraphLabel(restirScheme))
 
         ax.set(xlabel="time (ms)", ylabel="frametime (ms)", title=f"frametimes ({scene})")
         ax.set_xbound(lower=0, upper=3000)
+        ax.set_ybound(lower=0)
         ax.grid()
         ax.legend()
         fig.savefig(path.join(figuresPath, f"FrameTimes_{scene}.png"))
@@ -350,10 +368,11 @@ def ExportGraphs():
 
             for restirScheme in restirSchemes:
                 cumulativeFrameTimes, errorValue = graphsDict[scene][restirScheme][errorMetric]
-                ax.plot(cumulativeFrameTimes, errorValue, label=restirScheme)
+                ax.semilogy(cumulativeFrameTimes, errorValue, label=naiveSchemeToGraphLabel(restirScheme))
 
             ax.set(xlabel="time (ms)", ylabel=f"{errorMetric}", title=f"{errorMetric} ({scene})")
             ax.set_xbound(lower=0, upper=500)
+            ax.set_ybound(lower=0)
             ax.grid()
             ax.legend()
             fig.savefig(path.join(figuresPath, f"{errorMetric}_{scene}.png"))

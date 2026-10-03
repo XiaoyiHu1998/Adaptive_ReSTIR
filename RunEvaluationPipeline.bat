@@ -1,2 +1,2 @@
-RunDataExport.bat
-RunDataAnalysis.bat
+call RunDataExport.bat
+call RunDataAnalysis.bat
