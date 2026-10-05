@@ -131,7 +131,7 @@ private:
         ShiftMapping    shiftStrategy = ShiftMapping::Hybrid;
         bool            temporalUpdateForDynamicScene = false;
 
-        PathSamplingMode pathSamplingMode = PathSamplingMode::ReSTIR;
+        PathSamplingMode pathSamplingMode = PathSamplingMode::PathTracing;
 
         bool            separatePathBSDF = true;
 
@@ -191,7 +191,7 @@ private:
     uint64_t                        mAccumulatedShadowRayCount = 0;
 
     // params below
-    bool                            mEnableTemporalReuse = false;
+    bool                            mEnableTemporalReuse = true;
     bool                            mEnableSpatialReuse = true;
     SpatialReusePattern             mSpatialReusePattern = SpatialReusePattern::Default;
     PathReusePattern                mPathReusePattern = PathReusePattern::NRooksShift;
@@ -217,11 +217,11 @@ private:
     bool mResetRenderPassFlags = false;
 
     // Adaptive RIS Path Generation
-    bool mEnableAdaptiveRIS = true;
+    bool mEnableAdaptiveRIS = false;
     AdaptiveRIS mAdaptiveRISScheme = AdaptiveRIS::TileBased;
 
     // Naive
-    uint mSamplingRateRIS = 3;
+    uint mSamplingRateRIS = 2;
     uint mPatterns[6][8] = { //4x4 grid generation patterns, each uint encodes generation patterns for two subsequent frames
         {0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU}, // Full
         {0x7777BBBBU, 0xDDDDEEEEU, 0x7777BBBBU, 0xDDDDEEEEU, 0x7777BBBBU, 0xDDDDEEEEU, 0x7777BBBBU, 0xDDDDEEEEU}, // 3/4
@@ -247,7 +247,7 @@ private:
     Buffer::SharedPtr mPixelCandidateStatus = Buffer::create(mPixelCandidateStatusData.size() * sizeof(uint), ResourceBindFlags::UnorderedAccess, Buffer::CpuAccess::Read, mPixelCandidateStatusData.data());
 
     // Adaptive Temporal Reuse
-    bool mEnableAdaptiveTemporalReuse = true;
+    bool mEnableAdaptiveTemporalReuse = false;
     bool mValidAdaptiveHistory = false;
     float mAdaptiveTemporalHistoryCap = 20.0f;
 
