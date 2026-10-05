@@ -108,6 +108,40 @@ def captureFramesPaused(frameCount: int, m, targetFrames: list = []):
     m.clock.play()
 
 
+# capture frames while clock is paused
+def captureReferenceFrames(frameCount: int, accumulationCount: int, m):
+    assert(baseDirectory is not "")
+    assert(sceneName is not "")
+    assert(runName is not "")
+
+    sceneDirectory = f"{baseDirectory}/Captures/{sceneName}"
+    runDirectory = f"{baseDirectory}/Captures/{sceneName}/{runName}"
+
+    if not path.exists(sceneDirectory):
+        os.mkdir(sceneDirectory)
+
+    if not path.exists(runDirectory):
+        os.mkdir(runDirectory)
+
+    files = os.listdir(runDirectory)
+    if len(files) > 0:
+        for file in files:
+            os.remove(f"{runDirectory}/{file}")
+
+    m.frameCapture.outputDir = runDirectory
+    m.clock.pause()
+
+    for i in range(frameCount * accumulationCount):
+        m.renderFrame()
+
+        if i % accumulationCount == 0:
+            m.frameCapture.baseFilename = f"Mogwai-{i:04d}"
+            m.frameCapture.capture()
+            m.clock.step(frames=1)
+
+    m.clock.play()
+
+
 # Timing Capture
 def captureTiming(m):
     assert(baseDirectory is not "")
