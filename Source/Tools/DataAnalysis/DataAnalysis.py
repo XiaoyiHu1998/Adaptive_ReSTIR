@@ -40,14 +40,11 @@ def ExportErrorMetrics():
         for run in runs:
             runPath = path.join(scenePath, run)
 
-            if run not in runLogDict[scene].keys():
-                runLogDict[scene][run] = path.getmtime(runPath)
-            else:
-                if runLogDict[scene][run] == path.getmtime(runPath):
-                    print(f"skipped comparing images in {runPath}\t")
-                    continue
+            if run in runLogDict[scene].keys() and int(runLogDict[scene][run]) >= int(path.getmtime(runPath)):
+                print(f"skipped comparing images in {runPath}\t")
+                continue
 
-            print(f"comparing images in {runPath}\t")
+            print(f"comparing images in {runPath}\t", end="\r")
             runLogDict[scene][run] = path.getmtime(runPath)
 
             runFrames = [path.join(runPath, image) for image in os.listdir(runPath) if image.split(".")[-1] == "png"]
@@ -63,22 +60,9 @@ def ExportErrorMetrics():
             rmseCalls = []
             mapeCalls = []
 
-            # print(f"current frame: {runFrames[0]}", end="\r")
             for frameIndex in range(len(runFrames)):
-                # print(f"current frame: {runFrames[frameIndex]}", end="\r")
-
                 runFrame = runFrames[frameIndex]
                 referenceFrame = referenceFrames[frameIndex] if isAnimatedScene else referenceFrames[0]
-
-                # maeCall = [ImageComparePath, "-m", "mae", runFrame, referenceFrame]
-                # mseCall = [ImageComparePath, "-m", "mse", runFrame, referenceFrame]
-                # rmseCall = [ImageComparePath, "-m", "rmse", runFrame, referenceFrame]
-                # mapeCall = [ImageComparePath, "-m", "mape", runFrame, referenceFrame]
-
-                # errorsMAE.append(subprocess.run(maeCall, capture_output=True, text=True).stdout.strip())
-                # errorsMSE.append(subprocess.run(mseCall, capture_output=True, text=True).stdout.strip())
-                # errorsRMSE.append(subprocess.run(rmseCall, capture_output=True, text=True).stdout.strip())
-                # errorsMAPE.append(subprocess.run(mapeCall, capture_output=True, text=True).stdout.strip())
 
                 maeCall = [ImageComparePath, "-m", "mae", runFrame, referenceFrame]
                 mseCall = [ImageComparePath, "-m", "mse", runFrame, referenceFrame]
@@ -346,37 +330,95 @@ def ExportGraphs():
     for scene in graphsDict.keys():
         restirSchemes = sorted(graphsDict[scene].keys())
 
-        # Frametime graph
+        # Frametime graph naive schemes
         fig, ax = plt.subplots()
-
         for restirScheme in restirSchemes:
-            cumulativeFrameTimes, frametimes = graphsDict[scene][restirScheme]["frametimes"]
-            ax.plot(cumulativeFrameTimes, frametimes, label=naiveSchemeToGraphLabel(restirScheme))
+            excludedSchemes = ["TileBased", "PerPixel", "PerPixel - RISGuarantee"]
 
-        ax.set(xlabel="time (ms)", ylabel="frametime (ms)", title=f"frametimes ({scene})")
+            if restirScheme not in excludedSchemes:
+                cumulativeFrameTimes, frametimes = graphsDict[scene][restirScheme]["frametimes"]
+                line, = ax.plot(cumulativeFrameTimes, frametimes, label=naiveSchemeToGraphLabel(restirScheme))
+
+                if "Naive" in restirScheme and not "Full" in restirScheme:
+                    line.set_dashes([4, 4])
+                    line.set_dash_capstyle("round")
+
+        ax.set(xlabel="time (ms)", ylabel="frametime (ms)", title=f"Naive scheme frametimes ({scene})")
         ax.set_xbound(lower=0, upper=3000)
         ax.set_ybound(lower=0)
         ax.grid()
         ax.legend()
-        fig.savefig(path.join(figuresPath, f"FrameTimes_{scene}.png"))
-        print(f"Exported FrameTimes_{scene}.png")
+        figureName = f"NaiveSchemes_FrameTimes_{scene}.png"
+        fig.savefig(path.join(figuresPath, figureName))
+        print(figureName)
 
-        # Error Metrics
+        # Frametime graph main schemes
+        fig, ax = plt.subplots()
+        for restirScheme in restirSchemes:
+            includedSchemes = ["TileBased", "PerPixel", "Naive - Full", "Naive - Quarter", "Naive - OneEighth"]
+
+            if restirScheme in includedSchemes:
+                cumulativeFrameTimes, frametimes = graphsDict[scene][restirScheme]["frametimes"]
+                line, = ax.plot(cumulativeFrameTimes, frametimes, label=naiveSchemeToGraphLabel(restirScheme))
+
+                if "Naive" in restirScheme and not "Full" in restirScheme:
+                    line.set_dashes([4, 4])
+                    line.set_dash_capstyle("round")
+
+        ax.set(xlabel="time (ms)", ylabel="frametime (ms)", title=f"Main schemes frametimes ({scene})")
+        ax.set_xbound(lower=0, upper=3000)
+        ax.set_ybound(lower=0)
+        ax.grid()
+        ax.legend()
+        figureName = f"MainSchemes_FrameTimes_{scene}.png"
+        fig.savefig(path.join(figuresPath, figureName))
+        print(figureName)
+
+        # Error Metrics Naive Scheme
         errorMetrics = ["MAE", "MSE", "RMSE", "MAPE"]
         for errorMetric in errorMetrics:
             fig, ax = plt.subplots()
 
-            for restirScheme in restirSchemes:
-                cumulativeFrameTimes, errorValue = graphsDict[scene][restirScheme][errorMetric]
-                ax.semilogy(cumulativeFrameTimes, errorValue, label=naiveSchemeToGraphLabel(restirScheme))
+            excludedSchemes = ["TileBased", "PerPixel", "PerPixel - RISGuarantee"]
 
-            ax.set(xlabel="time (ms)", ylabel=f"{errorMetric}", title=f"{errorMetric} ({scene})")
+            for restirScheme in restirSchemes:
+                if restirScheme not in excludedSchemes:
+                    cumulativeFrameTimes, errorValue = graphsDict[scene][restirScheme][errorMetric]
+                    line, = ax.semilogy(cumulativeFrameTimes, errorValue, label=naiveSchemeToGraphLabel(restirScheme))
+
+            ax.set(xlabel="time (ms)", ylabel=f"{errorMetric}", title=f"Naive schemes {errorMetric} ({scene})")
             ax.set_xbound(lower=0, upper=500)
             ax.set_ybound(lower=0)
             ax.grid()
             ax.legend()
-            fig.savefig(path.join(figuresPath, f"{errorMetric}_{scene}.png"))
-            print(f"Exported {errorMetric}_{scene}.png")
+            figureName = f"NaiveSchemes_{errorMetric}_{scene}.png"
+            fig.savefig(path.join(figuresPath, figureName))
+            print(figureName)
+
+        # Error Metrics Main Schemes
+        errorMetrics = ["MAE", "MSE", "RMSE", "MAPE"]
+        for errorMetric in errorMetrics:
+            fig, ax = plt.subplots()
+
+            includedSchemes = ["TileBased", "PerPixel", "Naive - Full", "Naive - Quarter", "Naive - OneEighth"]
+
+            for restirScheme in restirSchemes:
+                if restirScheme in includedSchemes:
+                    cumulativeFrameTimes, errorValue = graphsDict[scene][restirScheme][errorMetric]
+                    line, = ax.semilogy(cumulativeFrameTimes, errorValue, label=naiveSchemeToGraphLabel(restirScheme))
+
+                    if "Naive" in restirScheme and not "Full" in restirScheme:
+                        line.set_dashes([4, 4])
+                        line.set_dash_capstyle("round")
+
+            ax.set(xlabel="time (ms)", ylabel=f"{errorMetric}", title=f"Main schemes {errorMetric} ({scene})")
+            ax.set_xbound(lower=0, upper=500)
+            ax.set_ybound(lower=0)
+            ax.grid()
+            ax.legend()
+            figureName = f"MainSchemes_{errorMetric}_{scene}.png"
+            fig.savefig(path.join(figuresPath, figureName))
+            print(figureName)
 
     print("Finished Exporting Graphs")
 
