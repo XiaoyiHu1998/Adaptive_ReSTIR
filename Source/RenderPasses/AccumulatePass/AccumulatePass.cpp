@@ -103,6 +103,8 @@ AccumulatePass::AccumulatePass(const Dictionary& dict)
         if (!dict.keyExists(kEnabled)) mEnabled = dict["enableAccumulation"];
     }
 
+    mMaxAccumulatedFrames = 125000;
+    mEnabled = true;
     mpState = ComputeState::create();
 }
 
@@ -110,6 +112,8 @@ Dictionary AccumulatePass::getScriptingDictionary()
 {
     Dictionary dict;
     dict[kEnabled] = mEnabled;
+    dict[kEnabled] = true;
+    dict["enableAccumulation"] = true;
     if (mOutputFormat != ResourceFormat::Unknown) dict[kOutputFormat] = mOutputFormat;
     dict[kOutputSize] = mOutputSizeSelection;
     if (mOutputSizeSelection == RenderPassHelpers::IOSize::Fixed) dict[kFixedOutputSize] = mFixedOutputSize;
