@@ -339,9 +339,9 @@ def ExportGraphs():
                 cumulativeFrameTimes, frametimes = graphsDict[scene][restirScheme]["frametimes"]
                 line, = ax.plot(cumulativeFrameTimes, frametimes, label=naiveSchemeToGraphLabel(restirScheme))
 
-                if "Naive" in restirScheme and not "Full" in restirScheme:
-                    line.set_dashes([4, 4])
-                    line.set_dash_capstyle("round")
+                # if "Naive" in restirScheme and not "Full" in restirScheme:
+                #     line.set_dashes([4, 4])
+                #     line.set_dash_capstyle("round")
 
         ax.set(xlabel="time (ms)", ylabel="frametime (ms)", title=f"Naive scheme frametimes ({scene})")
         ax.set_xbound(lower=0, upper=3000)
@@ -350,7 +350,7 @@ def ExportGraphs():
         ax.legend()
         figureName = f"NaiveSchemes_FrameTimes_{scene}.png"
         fig.savefig(path.join(figuresPath, figureName))
-        print(figureName)
+        print(f"Exported {figureName}")
 
         # Frametime graph main schemes
         fig, ax = plt.subplots()
@@ -372,7 +372,7 @@ def ExportGraphs():
         ax.legend()
         figureName = f"MainSchemes_FrameTimes_{scene}.png"
         fig.savefig(path.join(figuresPath, figureName))
-        print(figureName)
+        print(f"Exported {figureName}")
 
         # Error Metrics Naive Scheme
         errorMetrics = ["MAE", "MSE", "RMSE", "MAPE"]
@@ -387,13 +387,13 @@ def ExportGraphs():
                     line, = ax.semilogy(cumulativeFrameTimes, errorValue, label=naiveSchemeToGraphLabel(restirScheme))
 
             ax.set(xlabel="time (ms)", ylabel=f"{errorMetric}", title=f"Naive schemes {errorMetric} ({scene})")
-            ax.set_xbound(lower=0, upper=500)
+            ax.set_xbound(lower=0, upper=2000)
             ax.set_ybound(lower=0)
             ax.grid()
             ax.legend()
             figureName = f"NaiveSchemes_{errorMetric}_{scene}.png"
             fig.savefig(path.join(figuresPath, figureName))
-            print(figureName)
+            print(f"Exported {figureName}")
 
         # Error Metrics Main Schemes
         errorMetrics = ["MAE", "MSE", "RMSE", "MAPE"]
@@ -412,13 +412,13 @@ def ExportGraphs():
                         line.set_dash_capstyle("round")
 
             ax.set(xlabel="time (ms)", ylabel=f"{errorMetric}", title=f"Main schemes {errorMetric} ({scene})")
-            ax.set_xbound(lower=0, upper=500)
+            ax.set_xbound(lower=0, upper=2000)
             ax.set_ybound(lower=0)
             ax.grid()
             ax.legend()
             figureName = f"MainSchemes_{errorMetric}_{scene}.png"
             fig.savefig(path.join(figuresPath, figureName))
-            print(figureName)
+            print(f"Exported {figureName}")
 
     print("Finished Exporting Graphs")
 
