@@ -212,14 +212,14 @@ struct PathGenerator
             gDuplicationMap[pixel.x + pixel.y * params.frameDim.x] = duplicationScore;
 
             // Check if pixel has gone without new sample for too long
-            uint framesSinceRISCandidate = gNonRISFrameCounters[pixel.x + pixel.y * params.frameDim.x];
-            bool tooLongWithoutRISCandidate = framesSinceRISCandidate >= 15;
+            // uint framesSinceRISCandidate = gNonRISFrameCounters[pixel.x + pixel.y * params.frameDim.x];
+            // bool tooLongWithoutRISCandidate = framesSinceRISCandidate >= 15;
             // bool tooLongWithoutRISCandidate = false;
 
             // Calculate chance of generating new samples [0,inf)
             float candidateChance = 1.f - easingFunction(min(gAdaptiveTemporalHistoryCap, temporalReservoir.M) / gAdaptiveTemporalHistoryCap);
             if (specularOrTransmissiveMaterials) { candidateChance = 0.5f; }
-            if (!validTemporalReservoir || disoccluded || incorrectReprojection || tooLongWithoutRISCandidate) { candidateChance = 1.0f; }
+            if (!validTemporalReservoir || disoccluded || incorrectReprojection /*|| tooLongWithoutRISCandidate*/) { candidateChance = 1.0f; }
             candidateChance += duplicationScore;
             candidateChance = min(gAdaptiveMaxPerPixelRISRate, max(gAdaptiveMinPerPixelRISRate, candidateChance));
 
@@ -231,7 +231,7 @@ struct PathGenerator
             bool generateRIS = sampleCount > 0;
 
             // Update NonRISFrameTimers
-            gNonRISFrameCounters[pixel.x + pixel.y * params.frameDim.x] = generateRIS ? 0 : framesSinceRISCandidate + 1;
+            // gNonRISFrameCounters[pixel.x + pixel.y * params.frameDim.x] = generateRIS ? 0 : framesSinceRISCandidate + 1;
 
             // Write pathID to gRISPathIDs buffer for each RIS candidate pixel using prefix sum
             bool RISPixel = generateRIS;
