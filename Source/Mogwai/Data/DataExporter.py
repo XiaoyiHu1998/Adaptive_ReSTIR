@@ -124,6 +124,7 @@ def captureReferenceFrames(frameCount: int, accumulationCount: int, m, startFram
         os.mkdir(runDirectory)
 
     existingFiles = os.listdir(runDirectory)
+    existingFrameIndices = [int(existingFile.split(".")[0].split("_")[-1]) for existingFile in existingFiles if existingFile.split(".")[-1] == "png"]
 
     m.frameCapture.outputDir = runDirectory
     m.clock.pause()
@@ -131,11 +132,15 @@ def captureReferenceFrames(frameCount: int, accumulationCount: int, m, startFram
     if startFrame > 0:
         m.clock.step(frames=startFrame)
 
-    for frameIndex in range(startFrame, frameCount):
+    for frameIndex in range(startFrame, startFrame + frameCount):
+        if frameIndex in existingFrameIndices:
+            m.clock.step(frames=1)
+            continue
+
         for _ in range(accumulationCount):
             m.renderFrame()
 
-        m.frameCapture.baseFilename = f"Reference_{frameIndex:04d}"
+        m.frameCapture.baseFilename = f"Reference_{frameIndex}"
 
         overlappingFiles = [existingFile for existingFile in existingFiles if m.frameCapture.baseFilename in existingFile]
         if len(overlappingFiles) > 0:
