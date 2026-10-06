@@ -60,7 +60,8 @@ def ExportErrorMetrics():
             rmseCalls = []
             mapeCalls = []
 
-            for frameIndex in range(len(runFrames)):
+            maxFrameIndex = min(len(runFrames), len(referenceFrames)) if isAnimatedScene else len(runFrames)
+            for frameIndex in range(maxFrameIndex):
                 runFrame = runFrames[frameIndex]
                 referenceFrame = referenceFrames[frameIndex] if isAnimatedScene else referenceFrames[0]
 
