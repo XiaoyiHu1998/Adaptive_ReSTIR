@@ -103,7 +103,7 @@ AccumulatePass::AccumulatePass(const Dictionary& dict)
         if (!dict.keyExists(kEnabled)) mEnabled = dict["enableAccumulation"];
     }
 
-    mMaxAccumulatedFrames = 125000;
+    mMaxAccumulatedFrames = 20000;
     mEnabled = true;
     mpState = ComputeState::create();
 }
