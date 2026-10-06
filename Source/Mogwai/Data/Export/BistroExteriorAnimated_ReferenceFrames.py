@@ -61,11 +61,11 @@ def export_frame_data(scenePath: str, frameCount: int):
     m.unloadScene()
 
 
-def export_reference_frames(scenePath: str, frameCount: int, accumulationCount: int):
+def export_reference_frames(scenePath: str, frameCount: int, accumulationCount: int, startFrame: int = 0):
     m.loadScene(scenePath)
 
     
-    DE.captureReferenceFrames(frameCount, accumulationCount, m)
+    DE.captureReferenceFrames(frameCount, accumulationCount, m, startFrame)
     print(f"captured {frameCount} reference frames")
 
     m.unloadScene()
@@ -86,5 +86,5 @@ DE.sceneName = cfg.BistroExteriorAnimatedName
 DE.runName = "Reference"
 
 # Data Export
-export_reference_frames(cfg.BistroExteriorAnimatedPath, cfg.frameDataFrames, cfg.referenceFrameAccumulationCount)
+export_reference_frames(cfg.BistroExteriorAnimatedPath, cfg.referenceFrameFrames, cfg.referenceFrameAccumulationCount)
 exit()
