@@ -109,7 +109,7 @@ def captureFramesPaused(frameCount: int, m, targetFrames: list = []):
 
 
 # capture frames while clock is paused
-def captureReferenceFrames(frameCount: int, accumulationCount: int, m):
+def captureReferenceFrames(frameCount: int, accumulationCount: int, m, startFrame = 0):
     assert(baseDirectory is not "")
     assert(sceneName is not "")
     assert(runName is not "")
@@ -123,21 +123,27 @@ def captureReferenceFrames(frameCount: int, accumulationCount: int, m):
     if not path.exists(runDirectory):
         os.mkdir(runDirectory)
 
-    files = os.listdir(runDirectory)
-    if len(files) > 0:
-        for file in files:
-            os.remove(f"{runDirectory}/{file}")
+    existingFiles = os.listdir(runDirectory)
 
     m.frameCapture.outputDir = runDirectory
     m.clock.pause()
 
-    for i in range(frameCount * accumulationCount):
-        m.renderFrame()
+    if startFrame > 0:
+        m.clock.step(frames=startFrame)
 
-        if i % accumulationCount == 0:
-            m.frameCapture.baseFilename = f"Mogwai-{i:04d}"
-            m.frameCapture.capture()
-            m.clock.step(frames=1)
+    for frameIndex in range(startFrame, frameCount):
+        for _ in range(accumulationCount):
+            m.renderFrame()
+
+        m.frameCapture.baseFilename = f"Reference_{frameIndex:04d}"
+
+        overlappingFiles = [existingFile for existingFile in existingFiles if m.frameCapture.baseFilename in existingFile]
+        if len(overlappingFiles) > 0:
+            for overlappingFile in overlappingFiles:
+                os.remove(path.join(runDirectory, overlappingFile))
+
+        m.frameCapture.capture()
+        m.clock.step(frames=1)
 
     m.clock.play()
 
