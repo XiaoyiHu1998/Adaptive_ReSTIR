@@ -60,7 +60,8 @@ def ExportErrorMetrics():
             rmseCalls = []
             mapeCalls = []
 
-            for frameIndex in range(len(runFrames)):
+            maxFrameIndex = min(len(runFrames), len(referenceFrames)) if isAnimatedScene else len(runFrames)
+            for frameIndex in range(maxFrameIndex):
                 runFrame = runFrames[frameIndex]
                 referenceFrame = referenceFrames[frameIndex] if isAnimatedScene else referenceFrames[0]
 
@@ -207,6 +208,18 @@ def ExportAverageProfilerData():
             else:
                 dataDict[scene][restirScheme].append(profilerDict)
 
+    # profilerDict keys for different passes
+    ReSTIRPTPass = "/onFrameRender/RenderGraphExe::execute()/ReSTIRPTPass/gpuTime"
+    generatePaths = "/onFrameRender/RenderGraphExe::execute()/ReSTIRPTPass/generatePaths/gpuTime"
+    tracePass = "/onFrameRender/RenderGraphExe::execute()/ReSTIRPTPass/tracePass/gpuTime"
+    temporalPathRetrace = "/onFrameRender/RenderGraphExe::execute()/ReSTIRPTPass/temporalPathRetrace/gpuTime"
+    temporalReuse = "/onFrameRender/RenderGraphExe::execute()/ReSTIRPTPass/temporalReuse/gpuTime"
+    spatialPathRetrace = "/onFrameRender/RenderGraphExe::execute()/ReSTIRPTPass/spatialPathRetrace/gpuTime"
+    spatialReuse = "/onFrameRender/RenderGraphExe::execute()/ReSTIRPTPass/spatialReuse/gpuTime"
+    EmissivePowerSamplerUpdate = "/onFrameRender/RenderGraphExe::execute()/ReSTIRPTPass/EmissivePowerSampler::update/gpuTime"
+
+    generatePathsPassName = lambda restirScheme: "generatePathsNaive" if "Naive" in restirScheme else ("generatePathsPerPixel" if "PerPixel" in restirScheme else "generatePathsTileBased")
+
     exportDict = dict()
     for scene in dataDict.keys():
         exportDict[scene] = dict()
@@ -220,23 +233,55 @@ def ExportAverageProfilerData():
             for profilerDict in dictList:
                 minFrameCount = min(minFrameCount, profilerDict["frameCount"])
 
-            averageStats = {"min": 0.0, "max": 0.0, "mean": 0.0, "stdDev": 0.0}
-            averageRecords = []
+            ReSTIRPTStats = {"min": 0.0, "max": 0.0, "mean": 0.0, "stdDev": 0.0}
+            averageReSTIRPTPass = []
+            averageGeneratePaths = []
+            averageTracePass = []
+            averageSpatialPathRetrace = []
+            averageSpatialReuse = []
+            averageEmissivePowerSamplerUpdate = []
+
+            generatePathsScheme = generatePaths.replace("generatePaths", generatePathsPassName(restirScheme))
 
             for frame in range(minFrameCount):
-                averageRecordValue = 0.0
+                averageReSTIRPTPassValue = 0.0
+                averageGeneratePathsValue = 0.0
+                averageTracePassValue = 0.0
+                averageSpatialPathRetraceValue = 0.0
+                averageSpatialReuseValue = 0.0
+                averageEmissivePowerSamplerUpdateValue = 0.0
     
                 for profilerDict in dictList:
-                    averageRecordValue += (1.0 / float(dictCount)) * profilerDict["events"]["/onFrameRender/RenderGraphExe::execute()/ReSTIRPTPass/gpuTime"]["records"][frame]
+                    averageReSTIRPTPassValue += (1.0 / float(dictCount)) * profilerDict["events"][ReSTIRPTPass]["records"][frame]
+                    averageGeneratePathsValue += (1.0 / float(dictCount)) * profilerDict["events"][generatePathsScheme]["records"][frame]
+                    averageTracePassValue += (1.0 / float(dictCount)) * profilerDict["events"][tracePass]["records"][frame]
+                    averageSpatialPathRetraceValue += (1.0 / float(dictCount)) * profilerDict["events"][spatialPathRetrace]["records"][frame]
+                    averageSpatialReuseValue += (1.0 / float(dictCount)) * profilerDict["events"][spatialReuse]["records"][frame]
+                    averageEmissivePowerSamplerUpdateValue += (1.0 / float(dictCount)) * profilerDict["events"][EmissivePowerSamplerUpdate]["records"][frame]
     
-                averageRecords.append(averageRecordValue)
+                averageReSTIRPTPass.append(averageReSTIRPTPassValue)
+                averageGeneratePaths.append(averageGeneratePathsValue)
+                averageTracePass.append(averageTracePassValue)
+                averageSpatialPathRetrace.append(averageSpatialPathRetraceValue)
+                averageSpatialReuse.append(averageSpatialReuseValue)
+                averageEmissivePowerSamplerUpdate.append(averageEmissivePowerSamplerUpdateValue)
     
-            averageStats["min"] = min(averageRecords)
-            averageStats["max"] = max(averageRecords)
-            averageStats["mean"] = st.mean(averageRecords)
-            averageStats["stdDev"] = st.stdev(averageRecords)
+            ReSTIRPTStats["min"] = min(averageReSTIRPTPass)
+            ReSTIRPTStats["max"] = max(averageReSTIRPTPass)
+            ReSTIRPTStats["mean"] = st.mean(averageReSTIRPTPass)
+            ReSTIRPTStats["stdDev"] = st.stdev(averageReSTIRPTPass)
     
-            exportDict[scene][restirScheme] = {"name": "/onFrameRender/RenderGraphExe::execute()/ReSTIRPTPass/gpuTime", "stats": averageStats, "records": averageRecords, "frameCount": minFrameCount}
+            exportDict[scene][restirScheme] = {
+                "name": "/onFrameRender/RenderGraphExe::execute()/ReSTIRPTPass/gpuTime",
+                "ReSTIRPTStats": ReSTIRPTStats,
+                "ReSTIRPTPass": averageReSTIRPTPass,
+                "generatePaths": averageGeneratePaths,
+                "tracePass": averageTracePass,
+                "spatialPathRetrace": averageSpatialPathRetrace,
+                "spatialReuse": averageSpatialReuse,
+                "emissivePowerSamplerUpdate": averageEmissivePowerSamplerUpdate,
+                "frameCount": minFrameCount
+                }
         
     print("Exporting average profiler data", end="\r")
     with open(path.join(capturesPath, "profilerCapture.json"), "w") as file:
@@ -261,7 +306,7 @@ def naiveSchemeToGraphLabel(restirScheme):
             return restirScheme
 
 
-def ExportGraphs():
+def GenerateGraphsDict():
     baseFolder = sys.argv[1]
     # ImageComparePath = sys.argv[2]
 
@@ -279,10 +324,6 @@ def ExportGraphs():
     with open(profilerDataFilepath, "r") as file:
         profilerDataDict = json.load(file)
 
-    figuresPath = path.join(baseFolder, "Figures")
-    if not path.exists(figuresPath):
-        os.mkdir(figuresPath)
-
     # Create graphsDict
     scenes = set(frameDataDict.keys()).intersection(set(profilerDataDict.keys()))
     graphsDict = dict()
@@ -299,15 +340,17 @@ def ExportGraphs():
 
             errorPlotFrameCount = min(frameErrorDict["frameCount"], profilerDict["frameCount"])
 
-            frameTimes = profilerDict["records"]
+            frameTimes = profilerDict["ReSTIRPTPass"]
+            frametimesReSTIROverhead = [total - tracePass for (total, tracePass) in zip(profilerDict["ReSTIRPTPass"], profilerDict["tracePass"]) if total > 0.0]
             cumulativeFrameTimes = []
             frameTimeSum = 0.0
             emptyFrameCount = 0
             for i in range(len(frameTimes)):
-                frameTimeSum += frameTimes[i]
-                if frameTimeSum == 0.0:
+                if frameTimes[i] == 0.0:
                     emptyFrameCount += 1
                     continue
+                else:
+                    frameTimeSum += frameTimes[i]
 
                 cumulativeFrameTimes.append(frameTimeSum)
 
@@ -325,7 +368,20 @@ def ExportGraphs():
             graphsDict[scene][restirScheme]["RMSE"] = (errorFrameTimes, errorRMSE)
             graphsDict[scene][restirScheme]["MAPE"] = (errorFrameTimes, errorMAPE)
 
-    # Export figures
+            if restirScheme == "Naive - OneSixteenth":
+                graphsDict[scene][restirScheme]["frametimesReSTIROverhead"] = (cumulativeFrameTimes, frametimesReSTIROverhead)
+
+    return graphsDict
+
+
+def ExportGraphs(graphsDict):
+    baseFolder = sys.argv[1]
+    # ImageComparePath = sys.argv[2]
+
+    figuresPath = path.join(baseFolder, "Figures")
+    if not path.exists(figuresPath):
+        os.mkdir(figuresPath)
+
     print("Generating graphs")
     for scene in graphsDict.keys():
         restirSchemes = sorted(graphsDict[scene].keys())
@@ -338,6 +394,10 @@ def ExportGraphs():
             if restirScheme not in excludedSchemes:
                 cumulativeFrameTimes, frametimes = graphsDict[scene][restirScheme]["frametimes"]
                 line, = ax.plot(cumulativeFrameTimes, frametimes, label=naiveSchemeToGraphLabel(restirScheme))
+
+                if restirScheme == "Naive - OneSixteenth":
+                    cumulativeFrameTimes, frametimesReSTIROverhead = graphsDict[scene][restirScheme]["frametimesReSTIROverhead"]
+                    line, = ax.plot(cumulativeFrameTimes, frametimesReSTIROverhead, label="Naive - 1/16 No Rays")
 
                 # if "Naive" in restirScheme and not "Full" in restirScheme:
                 #     line.set_dashes([4, 4])
@@ -423,11 +483,17 @@ def ExportGraphs():
     print("Finished Exporting Graphs")
 
 
+def ExportTableData(graphsDict):
+    return
+
+
 def main():
     ExportErrorMetrics()
     ExportAverageErrorMetrics()
     ExportAverageProfilerData()
-    ExportGraphs()
+    graphsDict = GenerateGraphsDict()
+    ExportGraphs(graphsDict)
+    ExportTableData(graphsDict)
 
 
 if __name__ == "__main__":
