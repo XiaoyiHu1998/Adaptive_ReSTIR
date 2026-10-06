@@ -142,7 +142,7 @@ def captureReferenceFrames(frameCount: int, accumulationCount: int, m, startFram
 
         m.frameCapture.baseFilename = f"Reference_{frameIndex}"
 
-        overlappingFiles = [existingFile for existingFile in existingFiles if m.frameCapture.baseFilename in existingFile]
+        overlappingFiles = [existingFile for existingFile in existingFiles if m.frameCapture.baseFilename == existingFile.split(".")[0]]
         if len(overlappingFiles) > 0:
             for overlappingFile in overlappingFiles:
                 os.remove(path.join(runDirectory, overlappingFile))
