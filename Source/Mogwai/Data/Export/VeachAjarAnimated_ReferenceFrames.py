@@ -64,7 +64,6 @@ def export_frame_data(scenePath: str, frameCount: int):
 def export_reference_frames(scenePath: str, frameCount: int, accumulationCount: int, startFrame: int = 0):
     m.loadScene(scenePath)
 
-    
     DE.captureReferenceFrames(frameCount, accumulationCount, m, startFrame)
     print(f"captured {frameCount} reference frames")
 
