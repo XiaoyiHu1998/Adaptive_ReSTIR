@@ -8,8 +8,14 @@ import statistics as st
 from concurrent.futures import ThreadPoolExecutor
 
 
-def executeImageCompareCall(commandList):
+def ExecuteImageCompareCall(commandList):
     return subprocess.run(commandList, capture_output=True, text=True).stdout.strip()
+
+
+def ExecuteFlipImageCompareCall(commandList):
+    output = subprocess.run(commandList, capture_output=True, text=True).stdout
+    output = output.split("\n")[1].strip().split(" ")[-1]
+    return output
 
 
 def ExportErrorMetrics():
@@ -39,6 +45,10 @@ def ExportErrorMetrics():
 
         for run in runs:
             runPath = path.join(scenePath, run)
+            flipDirPath = path.join(runPath, "Flip")
+
+            if not path.exists(flipDirPath):
+                os.makedirs(flipDirPath)
 
             if run in runLogDict[scene].keys() and int(runLogDict[scene][run]) >= int(path.getmtime(runPath)):
                 print(f"skipped comparing images in {runPath}\t")
@@ -54,11 +64,13 @@ def ExportErrorMetrics():
             errorsMSE = []
             errorsRMSE = []
             errorsMAPE = []
+            errorsFLIP = []
             
             maeCalls = []
             mseCalls = []
             rmseCalls = []
             mapeCalls = []
+            flipCalls = []
 
             maxFrameIndex = min(len(runFrames), len(referenceFrames)) if isAnimatedScene else len(runFrames)
             for frameIndex in range(maxFrameIndex):
@@ -69,17 +81,20 @@ def ExportErrorMetrics():
                 mseCall = [ImageComparePath, "-m", "mse", runFrame, referenceFrame]
                 rmseCall = [ImageComparePath, "-m", "rmse", runFrame, referenceFrame]
                 mapeCall = [ImageComparePath, "-m", "mape", runFrame, referenceFrame]
+                flipCall = ["flip", "-r", referenceFrame, "-t", runFrame, "-d", flipDirPath, "-v", "1"]
 
                 maeCalls.append(maeCall)
                 mseCalls.append(mseCall)
                 rmseCalls.append(rmseCall)
                 mapeCalls.append(mapeCall)
+                flipCalls.append(flipCall)
 
             with ThreadPoolExecutor(max_workers=16) as executor:
-                errorsMAE = list(executor.map(executeImageCompareCall, maeCalls))
-                errorsMSE = list(executor.map(executeImageCompareCall, mseCalls))
-                errorsRMSE = list(executor.map(executeImageCompareCall, rmseCalls))
-                errorsMAPE = list(executor.map(executeImageCompareCall, mapeCalls))
+                errorsMAE = list(executor.map(ExecuteImageCompareCall, maeCalls))
+                errorsMSE = list(executor.map(ExecuteImageCompareCall, mseCalls))
+                errorsRMSE = list(executor.map(ExecuteImageCompareCall, rmseCalls))
+                errorsMAPE = list(executor.map(ExecuteImageCompareCall, mapeCalls))
+                errorsFLIP = list(executor.map(ExecuteFlipImageCompareCall, flipCalls))
 
             exportDict = dict()
             exportDict["frameCount"] = len(runFrames)
@@ -87,6 +102,7 @@ def ExportErrorMetrics():
             exportDict["mse"] = errorsMSE
             exportDict["rmse"] = errorsRMSE
             exportDict["mape"] = errorsMAPE
+            exportDict["flip"] = errorsFLIP
 
             with open(path.join(runPath, "errors.json"), "w+") as file:
                 file.write(json.dumps(exportDict))
@@ -145,23 +161,27 @@ def ExportAverageErrorMetrics():
             averageMSE = []
             averageRMSE = []
             averageMAPE = []
+            averageFLIP = []
 
             for frameIndex in range(minFrameCount):
                 mae = 0.0
                 mse = 0.0
                 rmse = 0.0
                 mape = 0.0
+                flip = 0.0
     
                 for dictIndex in range(dictCount):
                     mae += (1.0 / float(dictCount)) * float(dictList[dictIndex]["mae"][frameIndex])
                     mse += (1.0 / float(dictCount)) * float(dictList[dictIndex]["mse"][frameIndex])
                     rmse += (1.0 / float(dictCount)) * float(dictList[dictIndex]["rmse"][frameIndex])
                     mape += (1.0 / float(dictCount)) * float(dictList[dictIndex]["mape"][frameIndex])
+                    flip += (1.0 / float(dictCount)) * float(dictList[dictIndex]["flip"][frameIndex])
     
                 averageMAE.append(mae)
                 averageMSE.append(mse)
                 averageRMSE.append(rmse)
                 averageMAPE.append(mape)
+                averageFLIP.append(flip)
 
             averageErrorDict = dict()
             averageErrorDict["frameCount"] = minFrameCount
@@ -169,6 +189,7 @@ def ExportAverageErrorMetrics():
             averageErrorDict["mse"] = averageMSE
             averageErrorDict["rmse"] = averageRMSE
             averageErrorDict["mape"] = averageMAPE
+            averageErrorDict["flip"] = averageFLIP
 
             exportDict[scene][restirScheme] = averageErrorDict
 
@@ -212,8 +233,8 @@ def ExportAverageProfilerData():
     ReSTIRPTPass = "/onFrameRender/RenderGraphExe::execute()/ReSTIRPTPass/gpuTime"
     generatePaths = "/onFrameRender/RenderGraphExe::execute()/ReSTIRPTPass/generatePaths/gpuTime"
     tracePass = "/onFrameRender/RenderGraphExe::execute()/ReSTIRPTPass/tracePass/gpuTime"
-    temporalPathRetrace = "/onFrameRender/RenderGraphExe::execute()/ReSTIRPTPass/temporalPathRetrace/gpuTime"
-    temporalReuse = "/onFrameRender/RenderGraphExe::execute()/ReSTIRPTPass/temporalReuse/gpuTime"
+    # temporalPathRetrace = "/onFrameRender/RenderGraphExe::execute()/ReSTIRPTPass/temporalPathRetrace/gpuTime"
+    # temporalReuse = "/onFrameRender/RenderGraphExe::execute()/ReSTIRPTPass/temporalReuse/gpuTime"
     spatialPathRetrace = "/onFrameRender/RenderGraphExe::execute()/ReSTIRPTPass/spatialPathRetrace/gpuTime"
     spatialReuse = "/onFrameRender/RenderGraphExe::execute()/ReSTIRPTPass/spatialReuse/gpuTime"
     EmissivePowerSamplerUpdate = "/onFrameRender/RenderGraphExe::execute()/ReSTIRPTPass/EmissivePowerSampler::update/gpuTime"
@@ -334,7 +355,7 @@ def GenerateGraphsDict():
         restirSchemes = frameDataRestirSchemes.intersection(profilerDataRestirSchemes)
 
         for restirScheme in restirSchemes:
-            graphsDict[scene][restirScheme] = {"frametimes": (), "MAE": (), "MSE": (), "RMSE": (), "MAPE": ()}
+            graphsDict[scene][restirScheme] = {"frametimes": (), "MAE": (), "MSE": (), "RMSE": (), "MAPE": (), "FLIP": ()}
             frameErrorDict = frameDataDict[scene][restirScheme]
             profilerDict = profilerDataDict[scene][restirScheme]
 
@@ -360,6 +381,7 @@ def GenerateGraphsDict():
             errorMSE = frameErrorDict["mse"][0:errorPlotFrameCount]
             errorRMSE = frameErrorDict["rmse"][0:errorPlotFrameCount]
             errorMAPE = frameErrorDict["mape"][0:errorPlotFrameCount]
+            errorFLIP = frameErrorDict["flip"][0:errorPlotFrameCount]
 
             errorFrameTimes = cumulativeFrameTimes[0:errorPlotFrameCount]
             graphsDict[scene][restirScheme]["frametimes"] = (cumulativeFrameTimes, frameTimes[emptyFrameCount:])
@@ -367,6 +389,7 @@ def GenerateGraphsDict():
             graphsDict[scene][restirScheme]["MSE"] = (errorFrameTimes, errorMSE)
             graphsDict[scene][restirScheme]["RMSE"] = (errorFrameTimes, errorRMSE)
             graphsDict[scene][restirScheme]["MAPE"] = (errorFrameTimes, errorMAPE)
+            graphsDict[scene][restirScheme]["Mean FLIP"] = (errorFrameTimes, errorFLIP)
 
             if restirScheme == "Naive - OneSixteenth":
                 graphsDict[scene][restirScheme]["frametimesReSTIROverhead"] = (cumulativeFrameTimes, frametimesReSTIROverhead)
@@ -437,7 +460,7 @@ def ExportGraphs():
         print(f"Exported {figureName}")
 
         # Error Metrics Naive Scheme
-        errorMetrics = ["MAE", "MSE", "RMSE", "MAPE"]
+        errorMetrics = ["MAE", "MSE", "RMSE", "MAPE", "Mean FLIP"]
         for errorMetric in errorMetrics:
             fig, ax = plt.subplots()
 
@@ -458,7 +481,7 @@ def ExportGraphs():
             print(f"Exported {figureName}")
 
         # Error Metrics Main Schemes
-        errorMetrics = ["MAE", "MSE", "RMSE", "MAPE"]
+        errorMetrics = ["MAE", "MSE", "RMSE", "MAPE", "Mean FLIP"]
         for errorMetric in errorMetrics:
             fig, ax = plt.subplots()
 
