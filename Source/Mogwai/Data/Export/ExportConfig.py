@@ -12,7 +12,7 @@ activeReSTIRScheme = "TileBased"
 profilerDataFrames = 800
 frameDataFrames = 100
 referenceFrameAccumulationCount = 50000
-referenceFrameFrames = 150
+referenceFrameFrames = 200
 
 # Base Directory
 baseDirectory = "H:/ThesisTestOutputs"
