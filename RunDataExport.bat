@@ -49,3 +49,5 @@ Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\BistroInterior_Pro
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\BistroInterior_ProfilerData_3.py
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\BistroInterior_ProfilerData_4.py
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\BistroInterior_ProfilerData_5.py
+
+python ExportCleanup.py

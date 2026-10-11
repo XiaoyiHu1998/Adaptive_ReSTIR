@@ -6,3 +6,5 @@ Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\BistroInteriorAnim
 
 @REM Veach Ajar Animated
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\VeachAjarAnimated_ReferenceFrames.py
+
+python ExportCleanup.py
