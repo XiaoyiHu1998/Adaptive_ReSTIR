@@ -374,9 +374,11 @@ def GenerateGraphsDict():
     return graphsDict
 
 
-def ExportGraphs(graphsDict):
+def ExportGraphs():
     baseFolder = sys.argv[1]
     # ImageComparePath = sys.argv[2]
+
+    graphsDict = GenerateGraphsDict()
 
     figuresPath = path.join(baseFolder, "Figures")
     if not path.exists(figuresPath):
@@ -480,20 +482,64 @@ def ExportGraphs(graphsDict):
             fig.savefig(path.join(figuresPath, figureName))
             print(f"Exported {figureName}")
 
-    print("Finished Exporting Graphs")
+    print("Finished Exporting Graphs\n")
 
 
-def ExportTableData(graphsDict):
-    return
+def ExportTableData():
+    baseFolder = sys.argv[1]
+    # ImageComparePath = sys.argv[2]
+
+    capturesPath = path.join(baseFolder, "Captures")
+    profilerDictPath = path.join(capturesPath, "profilerCapture.json")
+
+    if not path.exists(profilerDictPath):
+        return
+
+    profilerCaptureDict = dict()
+    with open(profilerDictPath, "r") as file:
+        profilerCaptureDict = json.load(file)
+
+    exportDict = dict()
+    for scene in profilerCaptureDict.keys():
+        exportDict[scene] = dict()
+        for restirScheme in profilerCaptureDict[scene].keys():
+            exportDict[scene][restirScheme] = dict()
+            profilerDict = profilerCaptureDict[scene][restirScheme]
+
+            ReSTIRPTPassTimes = profilerDict["ReSTIRPTPass"]
+            generatePathsTimes = profilerDict["generatePaths"]
+            tracePassTimes = profilerDict["tracePass"]
+            spatialPathRetraceTimes = profilerDict["spatialPathRetrace"]
+            spatialReuseTimes = profilerDict["spatialReuse"]
+            emissivePowerSamplerUpdateTimes = profilerDict["emissivePowerSamplerUpdate"]
+
+            nonTemporalTimes = list(map(sum, zip(generatePathsTimes, tracePassTimes, spatialPathRetraceTimes, spatialReuseTimes, emissivePowerSamplerUpdateTimes)))
+            temporalReusePassTimes = [total - nonTemporal for (total, nonTemporal) in zip(ReSTIRPTPassTimes, nonTemporalTimes)]
+            spatialReusePassTimes = list(map(sum, zip(spatialPathRetraceTimes, spatialReuseTimes)))
+
+            startIndex = -51
+            endIndex = -1
+            exportDict[scene][restirScheme]["ReSTIRPT_Total"] = round(sum(ReSTIRPTPassTimes[startIndex:endIndex]) / float(len(ReSTIRPTPassTimes[startIndex:endIndex])), 2)
+            exportDict[scene][restirScheme]["generatePaths"] = round(sum(generatePathsTimes[startIndex:endIndex]) / float(len(generatePathsTimes[startIndex:endIndex])), 2)
+            exportDict[scene][restirScheme]["tracePaths"] = round(sum(tracePassTimes[startIndex:endIndex]) / float(len(tracePassTimes[startIndex:endIndex])), 2)
+            exportDict[scene][restirScheme]["temporalReuse"] = round(sum(temporalReusePassTimes[startIndex:endIndex]) / float(len(temporalReusePassTimes[startIndex:endIndex])), 2)
+            exportDict[scene][restirScheme]["spatialReuse"] = round(sum(spatialReusePassTimes[startIndex:endIndex]) / float(len(spatialReusePassTimes[startIndex:endIndex])), 2)
+            exportDict[scene][restirScheme]["emissivePowerSamplerUpdate"] = round(sum(emissivePowerSamplerUpdateTimes[startIndex:endIndex]) / float(len(emissivePowerSamplerUpdateTimes[startIndex:endIndex])), 2)
+
+    exportDictName = "performancePerPass.json"
+    with open(path.join(capturesPath, exportDictName), "w+") as file:
+        file.write(json.dumps(exportDict, indent=4))
+        
+    print(f"Exported {exportDictName}")
 
 
 def main():
     ExportErrorMetrics()
     ExportAverageErrorMetrics()
     ExportAverageProfilerData()
-    graphsDict = GenerateGraphsDict()
-    ExportGraphs(graphsDict)
-    ExportTableData(graphsDict)
+    GenerateGraphsDict()
+    ExportGraphs()
+    ExportTableData()
 
 
 if __name__ == "__main__":

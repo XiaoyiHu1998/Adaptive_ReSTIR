@@ -124,7 +124,10 @@ def captureReferenceFrames(frameCount: int, accumulationCount: int, m, startFram
         os.mkdir(runDirectory)
 
     existingFiles = os.listdir(runDirectory)
-    existingFrameIndices = [int(existingFile.split(".")[0].split("_")[-1]) for existingFile in existingFiles if existingFile.split(".")[-1] == "png"]
+    existingFrameIndices = sorted([int(existingFile.split(".")[0].split("_")[-1]) for existingFile in existingFiles if existingFile.split(".")[-1] == "png"])
+
+    if len(existingFrameIndices) == frameCount and existingFrameIndices[0] == startFrame and existingFrameIndices[-1] == startFrame + frameCount - 1:
+        exit()
 
     m.frameCapture.outputDir = runDirectory
     m.clock.pause()
@@ -142,15 +145,8 @@ def captureReferenceFrames(frameCount: int, accumulationCount: int, m, startFram
 
         m.frameCapture.baseFilename = f"Reference_{frameIndex}"
 
-        overlappingFiles = [existingFile for existingFile in existingFiles if m.frameCapture.baseFilename == existingFile.split(".")[0]]
-        if len(overlappingFiles) > 0:
-            for overlappingFile in overlappingFiles:
-                os.remove(path.join(runDirectory, overlappingFile))
-
         m.frameCapture.capture()
         m.clock.step(frames=1)
-
-    m.clock.play()
 
 
 # Timing Capture
