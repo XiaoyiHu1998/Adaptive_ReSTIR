@@ -10,7 +10,7 @@ activeReSTIRScheme = "TileBased"
 
 # Frame capture count
 profilerDataFrames = 800
-frameDataFrames = 100
+frameDataFrames = 200
 referenceFrameAccumulationCount = 20000
 bistroAnimationFrames = 150
 veachAjarAnimationFrames = 200
