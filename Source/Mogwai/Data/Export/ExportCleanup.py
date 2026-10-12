@@ -16,7 +16,6 @@ def cleanFolder(folderPath):
 
     for subFolder in subFolders:
         subFolderPath = path.join(folderPath, subFolder)
-        print(subFolderPath)
         cleanFolder(subFolderPath)
 
 

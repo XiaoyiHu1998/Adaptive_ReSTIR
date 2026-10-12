@@ -85,5 +85,5 @@ DE.sceneName = cfg.VeachAjarAnimatedName
 DE.runName = "Reference"
 
 # Data Export
-export_reference_frames(cfg.VeachAjarAnimatedPath, cfg.referenceFrameFrames, cfg.referenceFrameAccumulationCount)
+export_reference_frames(cfg.VeachAjarAnimatedPath, cfg.veachAjarAnimationFrames, cfg.referenceFrameAccumulationCount)
 exit()

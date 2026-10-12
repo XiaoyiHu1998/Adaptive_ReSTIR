@@ -85,5 +85,5 @@ DE.sceneName = cfg.BistroInteriorAnimatedName
 DE.runName = "Reference"
 
 # Data Export
-export_reference_frames(cfg.BistroInteriorAnimatedPath, cfg.referenceFrameFrames, cfg.referenceFrameAccumulationCount)
+export_reference_frames(cfg.BistroInteriorAnimatedPath, cfg.bistroAnimationFrames, cfg.referenceFrameAccumulationCount)
 exit()
