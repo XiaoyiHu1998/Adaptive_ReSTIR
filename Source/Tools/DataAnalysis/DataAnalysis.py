@@ -72,8 +72,8 @@ def ExportErrorMetrics():
             mapeCalls = []
             flipCalls = []
 
-            maxFrameIndex = min(len(runFrames), len(referenceFrames)) if isAnimatedScene else len(runFrames)
-            for frameIndex in range(maxFrameIndex):
+            frameComparisonCount = min(len(runFrames), len(referenceFrames)) if isAnimatedScene else len(runFrames)
+            for frameIndex in range(frameComparisonCount):
                 runFrame = runFrames[frameIndex]
                 referenceFrame = referenceFrames[frameIndex] if isAnimatedScene else referenceFrames[0]
 
@@ -97,7 +97,7 @@ def ExportErrorMetrics():
                 errorsFLIP = list(executor.map(ExecuteFlipImageCompareCall, flipCalls))
 
             exportDict = dict()
-            exportDict["frameCount"] = len(runFrames)
+            exportDict["frameCount"] = frameComparisonCount
             exportDict["mae"] = errorsMAE
             exportDict["mse"] = errorsMSE
             exportDict["rmse"] = errorsRMSE
@@ -156,6 +156,7 @@ def ExportAverageErrorMetrics():
 
             for errorDict in dictList:
                 minFrameCount = min(minFrameCount, errorDict["frameCount"])
+                print(f"minFrameCount: {minFrameCount}", end="\n")
     
             averageMAE = []
             averageMSE = []
@@ -169,7 +170,7 @@ def ExportAverageErrorMetrics():
                 rmse = 0.0
                 mape = 0.0
                 flip = 0.0
-    
+
                 for dictIndex in range(dictCount):
                     mae += (1.0 / float(dictCount)) * float(dictList[dictIndex]["mae"][frameIndex])
                     mse += (1.0 / float(dictCount)) * float(dictList[dictIndex]["mse"][frameIndex])

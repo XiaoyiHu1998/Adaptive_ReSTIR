@@ -76,5 +76,5 @@ DE.sceneName = cfg.BistroExteriorAnimatedName
 DE.runName = cfg.activeReSTIRScheme + "_" + __file__.split(".")[0].split("_")[-1]
 
 # Data Export
-export_performance_data(cfg.BistroExteriorAnimatedPath, cfg.profilerDataFrames)
+export_performance_data(cfg.BistroExteriorAnimatedPath, cfg.bistroAnimationFrames)
 exit()

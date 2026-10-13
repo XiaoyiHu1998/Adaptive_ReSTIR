@@ -45,7 +45,7 @@ def captureProfilerData(frameCount: int, m):
 
 
 # capture list of frames
-def captureFrames(exitFrame: int, frameList: list, m):
+def captureAnimationFrames(startFrame: int, frameCount: int, m):
     assert(baseDirectory is not "")
     assert(sceneName is not "")
     assert(runName is not "")
@@ -59,18 +59,25 @@ def captureFrames(exitFrame: int, frameList: list, m):
     if not path.exists(runDirectory):
         os.mkdir(runDirectory)
         
-    files = os.listdir(runDirectory)
+    files = [file for file in os.listdir(runDirectory) if path.isfile(path.join(runDirectory, file))]
     if len(files) > 0:
         for file in files:
             os.remove(f"{runDirectory}/{file}")
 
-    m.clock.exitFrame = exitFrame
     m.frameCapture.outputDir = runDirectory
-    m.frameCapture.baseFilename = "Mogwai"
-    m.frameCapture.addFrames(m.activeGraph, frameList)
+    m.clock.pause()
+
+    if startFrame > 0:
+        m.clock.step(frames=startFrame)
+
+    for i in range(startFrame, startFrame + frameCount):
+        m.renderFrame()
+        m.frameCapture.baseFilename = f"Mogwai-{i:04d}"
+        m.frameCapture.capture()
+        m.clock.step(frames=1)
 
 
-# capture frames while clock is paused
+# capture frames with paused clock
 def captureFramesPaused(frameCount: int, m, targetFrames: list = []):
     assert(baseDirectory is not "")
     assert(sceneName is not "")
@@ -85,7 +92,7 @@ def captureFramesPaused(frameCount: int, m, targetFrames: list = []):
     if not path.exists(runDirectory):
         os.mkdir(runDirectory)
 
-    files = [file for file in os.listdir(runDirectory) if path.isfile(file)]
+    files = [file for file in os.listdir(runDirectory) if path.isfile(path.join(runDirectory, file))]
     if len(files) > 0:
         for file in files:
             os.remove(f"{runDirectory}/{file}")
@@ -127,7 +134,7 @@ def captureReferenceFrames(frameCount: int, accumulationCount: int, m, startFram
     existingFrameIndices = sorted([int(existingFile.split(".")[0].split("_")[-1]) for existingFile in existingFiles if existingFile.split(".")[-1] == "png"])
 
     if len(existingFrameIndices) == frameCount and existingFrameIndices[0] == startFrame and existingFrameIndices[-1] == startFrame + frameCount - 1:
-        exit()
+        return
 
     m.frameCapture.outputDir = runDirectory
     m.clock.pause()
@@ -144,7 +151,6 @@ def captureReferenceFrames(frameCount: int, accumulationCount: int, m, startFram
             m.renderFrame()
 
         m.frameCapture.baseFilename = f"Reference_{frameIndex}"
-
         m.frameCapture.capture()
         m.clock.step(frames=1)
 

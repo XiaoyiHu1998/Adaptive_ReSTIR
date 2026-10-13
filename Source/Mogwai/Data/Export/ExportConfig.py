@@ -15,6 +15,10 @@ referenceFrameAccumulationCount = 20000
 bistroAnimationFrames = 150
 veachAjarAnimationFrames = 200
 
+bistroExteriorAnimatedStartFrame = 0
+bistroInteriorAnimatedStartFrame = 0
+veachAjarAnimatedStartFrame = 0
+
 # Base Directory
 baseDirectory = "H:/ThesisTestOutputs"
 

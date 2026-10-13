@@ -61,6 +61,15 @@ def export_frame_data(scenePath: str, frameCount: int):
     m.unloadScene()
 
 
+def export_animation_frame_data(scenePath: str, startFrame: int, frameCount: int):
+    m.loadScene(scenePath)
+
+    DE.captureAnimationFrames(startFrame, frameCount, m)
+    print(f"captured animation frames in range ({startFrame}, {startFrame + frameCount})")
+
+    m.unloadScene()
+
+
 # Setup Falcor renderer
 graph_ReSTIRPT = render_graph_ReSTIRPT()
 m.addGraph(graph_ReSTIRPT)
@@ -68,7 +77,7 @@ m.addGraph(graph_ReSTIRPT)
 m.profiler.enabled = False
 m.profiler.paused = True
 m.clock.framerate = 30
-# m.clock.pause()
+m.clock.pause()
 
 # Export config
 DE.baseDirectory = cfg.baseDirectory
@@ -76,5 +85,5 @@ DE.sceneName = cfg.BistroInteriorAnimatedName
 DE.runName = cfg.activeReSTIRScheme + "_" + __file__.split(".")[0].split("_")[-1]
 
 # Data Export
-export_frame_data(cfg.BistroInteriorAnimatedPath, cfg.bistroAnimationFrames)
+export_animation_frame_data(cfg.BistroInteriorAnimatedPath, cfg.bistroInteriorAnimatedStartFrame, cfg.bistroAnimationFrames)
 exit()
