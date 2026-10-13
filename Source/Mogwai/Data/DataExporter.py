@@ -85,7 +85,7 @@ def captureFramesPaused(frameCount: int, m, targetFrames: list = []):
     if not path.exists(runDirectory):
         os.mkdir(runDirectory)
 
-    files = os.listdir(runDirectory)
+    files = [file for file in os.listdir(runDirectory) if path.isfile(file)]
     if len(files) > 0:
         for file in files:
             os.remove(f"{runDirectory}/{file}")

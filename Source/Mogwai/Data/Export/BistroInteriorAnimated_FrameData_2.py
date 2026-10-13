@@ -76,5 +76,5 @@ DE.sceneName = cfg.BistroInteriorAnimatedName
 DE.runName = cfg.activeReSTIRScheme + "_" + __file__.split(".")[0].split("_")[-1]
 
 # Data Export
-export_frame_data(cfg.BistroInteriorAnimatePath, cfg.bistroAnimationFrames)
+export_frame_data(cfg.BistroInteriorAnimatedPath, cfg.bistroAnimationFrames)
 exit()
