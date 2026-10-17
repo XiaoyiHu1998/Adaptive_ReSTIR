@@ -13,7 +13,7 @@ profilerDataFrames = 800
 frameDataFrames = 200
 referenceFrameAccumulationCount = 20000
 bistroAnimationFrames = 150
-veachAjarAnimationFrames = 200
+veachAjarAnimationFrames = 500
 
 bistroExteriorAnimatedStartFrame = 0
 bistroInteriorAnimatedStartFrame = 0

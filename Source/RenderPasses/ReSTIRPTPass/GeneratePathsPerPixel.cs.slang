@@ -185,29 +185,22 @@ struct PathGenerator
 
                 // Incorrect Reprojection handling
                 float3 temporalColor = temporalReservoir.F * temporalReservoir.weight;
-                if (temporalColor.r + temporalColor.b + temporalColor.g < 0.0001f)
-                {
-                    // color.g = 100000.0f;
-                    incorrectReprojection = true;
-                }
+                incorrectReprojection = temporalColor.r + temporalColor.b + temporalColor.g < 0.0001f;
 
                 // Handle Specular and Transmissive materials
                 bool transmissiveMaterial = any(temporalPrimarySd.transmission > 0.f);
                 bool specularMaterial = any(temporalPrimarySd.specular > 0.8f);
-                if (transmissiveMaterial || specularMaterial)
-                {
-                    specularOrTransmissiveMaterials = true;
-                }
+                specularOrTransmissiveMaterials = transmissiveMaterial || specularMaterial;
             }
 
-            static groupshared uint reservoirConfidenceWeights[256];
-            reservoirConfidenceWeights[threadIdx % 256] = temporalReservoir.rcRandomSeed;
+            static groupshared uint reservoirRandomSeeds[256];
+            reservoirRandomSeeds[threadIdx % 256] = temporalReservoir.rcRandomSeed;
             GroupMemoryBarrierWithGroupSync();
 
             float duplicationScore = -1.f / 255.f;
             for (int i = 0; i < 256; i++)
             {
-                if (temporalReservoir.rcRandomSeed == reservoirConfidenceWeights[i]) { duplicationScore += 1.f / 255.f; }
+                if (temporalReservoir.rcRandomSeed == reservoirRandomSeeds[i]) { duplicationScore += 1.f / 255.f; }
             }
             gDuplicationMap[pixel.x + pixel.y * params.frameDim.x] = duplicationScore;
 

@@ -72,7 +72,7 @@ def captureAnimationFrames(startFrame: int, frameCount: int, m):
 
     for i in range(startFrame, startFrame + frameCount):
         m.renderFrame()
-        m.frameCapture.baseFilename = f"Mogwai-{i:04d}"
+        m.frameCapture.baseFilename = f"{sceneName}_{runName}_{i:04d}"
         m.frameCapture.capture()
         m.clock.step(frames=1)
 
@@ -103,13 +103,13 @@ def captureFramesPaused(frameCount: int, m, targetFrames: list = []):
     if len(targetFrames) == 0:
         for i in range(frameCount):
             m.renderFrame()
-            m.frameCapture.baseFilename = f"Mogwai-{i:04d}"
+            m.frameCapture.baseFilename = f"{sceneName}_{runName}_{i:04d}"
             m.frameCapture.capture()
     else:
         for i in range(frameCount):
             m.renderFrame()
             if i in targetFrames:
-                m.frameCapture.baseFilename = f"Mogwai-{i:04d}"
+                m.frameCapture.baseFilename = f"{sceneName}_{runName}_{i:04d}"
                 m.frameCapture.capture()
 
     m.clock.play()
@@ -150,7 +150,7 @@ def captureReferenceFrames(frameCount: int, accumulationCount: int, m, startFram
         for _ in range(accumulationCount):
             m.renderFrame()
 
-        m.frameCapture.baseFilename = f"Reference_{frameIndex}"
+        m.frameCapture.baseFilename = f"Reference_{frameIndex:04d}"
         m.frameCapture.capture()
         m.clock.step(frames=1)
 
