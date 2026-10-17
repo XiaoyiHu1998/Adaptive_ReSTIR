@@ -1,6 +1,6 @@
 import os
 import os.path as path
-import Data.Export.ExportConfig as cfg
+import ExportConfig as cfg
 
 
 def cleanFolder(folderPath):
@@ -16,17 +16,16 @@ def cleanFolder(folderPath):
 
     for subFolder in subFolders:
         subFolderPath = path.join(folderPath, subFolder)
-        print(subFolderPath)
         cleanFolder(subFolderPath)
 
 
 def main():
+    capturesFolder = path.join(cfg.baseDirectory, "Captures")
     print(f"Cleaning up .exr files from {capturesFolder} and its subfolders")
 
-    capturesFolder = path.join(cfg.baseDirectory, "Captures")
     cleanFolder(capturesFolder)
 
-    print(f"Finished cleaning up .exr files from {capturesFolder} and its subfolders\n")
+    print(f"Finished cleaning up .exr files from {capturesFolder} and its subfolders\t\n")
 
 
 if __name__ == "__main__":

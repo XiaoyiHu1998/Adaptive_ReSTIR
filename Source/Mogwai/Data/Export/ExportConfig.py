@@ -10,9 +10,14 @@ activeReSTIRScheme = "TileBased"
 
 # Frame capture count
 profilerDataFrames = 800
-frameDataFrames = 100
+frameDataFrames = 200
 referenceFrameAccumulationCount = 50000
-referenceFrameFrames = 200
+bistroAnimationFrames = 150
+veachAjarAnimationFrames = 500
+
+bistroExteriorAnimatedStartFrame = 0
+bistroInteriorAnimatedStartFrame = 0
+veachAjarAnimatedStartFrame = 0
 
 # Base Directory
 baseDirectory = "H:/ThesisTestOutputs"
