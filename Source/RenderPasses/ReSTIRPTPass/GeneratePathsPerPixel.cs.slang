@@ -150,7 +150,7 @@ struct PathGenerator
             bool validTemporalReservoir = true;
             bool disoccluded;
             bool incorrectReprojection = false;
-            bool specularOrTransmissiveMaterials = false;
+            bool transmissiveMaterial = false;
             var sg = TinyUniformSampleGenerator(pixel, (kCandidateSamples + 1 + 1) * params.seed + kCandidateSamples);
             { 
                 float2 motionVector = motionVectors[pixel];
@@ -189,8 +189,6 @@ struct PathGenerator
 
                 // Handle Specular and Transmissive materials
                 bool transmissiveMaterial = any(temporalPrimarySd.transmission > 0.f);
-                bool specularMaterial = any(temporalPrimarySd.specular > 0.8f);
-                specularOrTransmissiveMaterials = transmissiveMaterial || specularMaterial;
             }
 
             static groupshared uint reservoirRandomSeeds[256];
@@ -204,14 +202,9 @@ struct PathGenerator
             }
             gDuplicationMap[pixel.x + pixel.y * params.frameDim.x] = duplicationScore;
 
-            // Check if pixel has gone without new sample for too long
-            // uint framesSinceRISCandidate = gNonRISFrameCounters[pixel.x + pixel.y * params.frameDim.x];
-            // bool tooLongWithoutRISCandidate = framesSinceRISCandidate >= 15;
-            // bool tooLongWithoutRISCandidate = false;
-
             // Calculate chance of generating new samples [0,inf)
             float candidateChance = 1.f - easingFunction(min(gAdaptiveTemporalHistoryCap, temporalReservoir.M) / gAdaptiveTemporalHistoryCap);
-            if (specularOrTransmissiveMaterials) { candidateChance = 0.5f; }
+            if (transmissiveMaterial) { candidateChance = candidateChance = max(0.75f, candidateChance) }
             if (!validTemporalReservoir || disoccluded || incorrectReprojection /*|| tooLongWithoutRISCandidate*/) { candidateChance = 1.0f; }
             candidateChance += duplicationScore;
             candidateChance = min(gAdaptiveMaxPerPixelRISRate, max(gAdaptiveMinPerPixelRISRate, candidateChance));
@@ -222,9 +215,6 @@ struct PathGenerator
                 sampleCount++;
             sampleCount = min(1, sampleCount);
             bool generateRIS = sampleCount > 0;
-
-            // Update NonRISFrameTimers
-            // gNonRISFrameCounters[pixel.x + pixel.y * params.frameDim.x] = generateRIS ? 0 : framesSinceRISCandidate + 1;
 
             // Write pathID to gRISPathIDs buffer for each RIS candidate pixel using prefix sum
             bool RISPixel = generateRIS;

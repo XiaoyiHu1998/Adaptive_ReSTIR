@@ -177,7 +177,7 @@ struct PathGenerator
             bool validTemporalReservoir = true;
             bool disoccluded;
             bool incorrectReprojection = false;
-            bool specularOrTransmissiveMaterials = false;
+            bool transmissiveMaterial = false;
             var sg = TinyUniformSampleGenerator(pixel, (kCandidateSamples + 1 + 1) * params.seed + kCandidateSamples);
             { 
                 float2 motionVector = motionVectors[pixel];
@@ -213,7 +213,7 @@ struct PathGenerator
                 incorrectReprojection = temporalColor.r + temporalColor.b + temporalColor.g < 0.0001f;
 
                 // Handle Specular and Transmissive materials
-                specularOrTransmissiveMaterials = any(temporalPrimarySd.transmission > 0.f) || any(temporalPrimarySd.specular > 0.7f);
+                transmissiveMaterial = any(temporalPrimarySd.transmission > 0.f);
             }
 
             // generation duplication scores for firefly supression inspired by ReSTIR PT Enhanced paper
@@ -229,7 +229,7 @@ struct PathGenerator
 
             // Calculate chance of generating new samples [0,inf)
             float candidateChance = 1.f - easingFunction(min(gAdaptiveTemporalHistoryCap, temporalReservoir.M) / gAdaptiveTemporalHistoryCap);
-            if (specularOrTransmissiveMaterials) { candidateChance = max(0.5f, candidateChance); }
+            if (transmissiveMaterial) { candidateChance = candidateChance = max(0.75f, candidateChance) }
             if (!validTemporalReservoir || disoccluded || incorrectReprojection) { candidateChance = 1.0f; }
             candidateChance += duplicationScore;
             candidateChance = min(1.0f, max(0.0625f, candidateChance));

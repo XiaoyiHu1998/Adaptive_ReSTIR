@@ -159,7 +159,7 @@ struct PathReusePass
 
             PathReservoir temporalReservoir = temporalReservoirs[params.getReservoirOffset(prevPixel)];
             float duplicationScore = 0.0f;
-            if (gEnableDuplicationMapping)
+            if (gEnableDuplicationMapping && all(temporalPrimarySd.transmission == 0.0f))
             {
                 duplicationScore = gDuplicationMap[pixel.x + pixel.y * params.frameDim.x];
             }
