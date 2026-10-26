@@ -229,7 +229,7 @@ struct PathGenerator
 
             // Calculate chance of generating new samples [0,inf)
             float candidateChance = 1.f - easingFunction(min(gAdaptiveTemporalHistoryCap, temporalReservoir.M) / gAdaptiveTemporalHistoryCap);
-            if (transmissiveMaterial) { candidateChance = candidateChance = max(0.75f, candidateChance) }
+            if (transmissiveMaterial) { candidateChance = candidateChance = max(0.75f, candidateChance); }
             if (!validTemporalReservoir || disoccluded || incorrectReprojection) { candidateChance = 1.0f; }
             candidateChance += duplicationScore;
             candidateChance = min(1.0f, max(0.0625f, candidateChance));
