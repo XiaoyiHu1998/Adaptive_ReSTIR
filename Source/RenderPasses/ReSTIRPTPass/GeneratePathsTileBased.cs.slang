@@ -118,19 +118,19 @@ struct PathGenerator
 
     uint determineGenerationPattern(float targetCandidateCount)
     {
-        if (targetCandidateCount <= 256.f * 0.0625f && gMinRate >= 5)
+        if (targetCandidateCount <= 256.f * 0.09375f && gMinRate >= 5)
             return gPatternOneSixteenth;
 
-        if (targetCandidateCount <= 256.f * 0.125f && gMinRate >= 4)
+        if (targetCandidateCount <= 256.f * 0.1875f && gMinRate >= 4)
             return gPatternOneEight;
 
-        if (targetCandidateCount <= 256.f * 0.25f && gMinRate >= 3)
+        if (targetCandidateCount <= 256.f * 0.375f && gMinRate >= 3)
             return gPatternQuarter;
 
-        if (targetCandidateCount <= 256.f * 0.50f && gMinRate >= 2)
+        if (targetCandidateCount <= 256.f * 0.625f && gMinRate >= 2)
             return gPatternHalf;
 
-        if (targetCandidateCount <= 256.f * 0.75f && gMinRate >= 1)
+        if (targetCandidateCount <= 256.f * 0.875f && gMinRate >= 1)
             return gPatternThreeQuarters;
 
         return 0xFFFFFFFF;
@@ -229,7 +229,7 @@ struct PathGenerator
 
             // Calculate chance of generating new samples [0,inf)
             float candidateChance = 1.f - easingFunction(min(gAdaptiveTemporalHistoryCap, temporalReservoir.M) / gAdaptiveTemporalHistoryCap);
-            if (transmissiveMaterial) { candidateChance = candidateChance = max(0.75f, candidateChance); }
+            if (transmissiveMaterial) { candidateChance = candidateChance = max(1.0f, candidateChance); }
             if (!validTemporalReservoir || disoccluded || incorrectReprojection) { candidateChance = 1.0f; }
             candidateChance += duplicationScore;
             candidateChance = min(1.0f, max(0.0625f, candidateChance));
