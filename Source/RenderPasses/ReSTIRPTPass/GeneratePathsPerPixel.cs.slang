@@ -151,6 +151,7 @@ struct PathGenerator
             bool disoccluded;
             bool incorrectReprojection = false;
             bool transmissiveMaterial = false;
+            bool specularMaterial = false;
             var sg = TinyUniformSampleGenerator(pixel, (kCandidateSamples + 1 + 1) * params.seed + kCandidateSamples);
             { 
                 float2 motionVector = motionVectors[pixel];
@@ -188,7 +189,8 @@ struct PathGenerator
                 incorrectReprojection = temporalColor.r + temporalColor.b + temporalColor.g < 0.0001f;
 
                 // Handle Specular and Transmissive materials
-                bool transmissiveMaterial = any(temporalPrimarySd.transmission > 0.f);
+                transmissiveMaterial = any(temporalPrimarySd.transmission > 0.f);
+                specularMaterial = any(temporalPrimarySd.specular > 0.8f);
             }
 
             static groupshared uint reservoirRandomSeeds[256];
@@ -204,7 +206,8 @@ struct PathGenerator
 
             // Calculate chance of generating new samples [0,inf)
             float candidateChance = 1.f - easingFunction(min(gAdaptiveTemporalHistoryCap, temporalReservoir.M) / gAdaptiveTemporalHistoryCap);
-            if (transmissiveMaterial) { candidateChance = candidateChance = max(1.0f, candidateChance); }
+            if (specularMaterial) { candidateChance = max(0.5f, candidateChance); }
+            if (transmissiveMaterial) { candidateChance = max(1.0f, candidateChance); }
             if (!validTemporalReservoir || disoccluded || incorrectReprojection /*|| tooLongWithoutRISCandidate*/) { candidateChance = 1.0f; }
             candidateChance += duplicationScore;
             candidateChance = min(gAdaptiveMaxPerPixelRISRate, max(gAdaptiveMinPerPixelRISRate, candidateChance));
