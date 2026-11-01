@@ -3,6 +3,7 @@ import os.path as path
 import subprocess
 import json
 import sys
+import shutil
 import matplotlib.pyplot as plt
 import statistics as st
 from concurrent.futures import ThreadPoolExecutor
@@ -598,6 +599,8 @@ def GatherComparisonData():
     capturesFolder = path.join(baseFolder, "Captures")
     comparisonDataFolder = path.join(baseFolder, "ComparisonData")
 
+    print(f"Gathering comparison data in {comparisonDataFolder}")
+
     captureScenes = [subfolder for subfolder in os.listdir(capturesFolder) if path.isdir(path.join(capturesFolder, subfolder))]
     for captureScene in captureScenes:
         sceneFolder = path.join(comparisonDataFolder, captureScene)
@@ -607,7 +610,7 @@ def GatherComparisonData():
         captureSceneFolder = path.join(capturesFolder, captureScene)
         schemes = [subfolder for subfolder in os.listdir(captureSceneFolder) if subfolder.split("_")[-1] == "1" or subfolder == "Reference"]
         for scheme in schemes:
-            print(f"{captureScene}\\{scheme}")
+            print(f"Gathering comparison data from {captureScene}\\{scheme}")
             schemeFolder = path.join(path.join(capturesFolder, captureScene), scheme)
             frames = sorted([file for file in os.listdir(schemeFolder) if path.isfile(path.join(schemeFolder, file)) and file.split(".")[-1] == "png"])
             lastFrame= frames[-1]
@@ -639,11 +642,12 @@ def GatherComparisonData():
                     os.remove(renamedFlipFile)
                 os.rename(path.join(comparisonFlipFolder, lastFlipFrame), renamedFlipFile)
 
-
     comparisonScenes = [subfolder for subfolder in os.listdir(comparisonDataFolder) if path.isdir(path.join(comparisonDataFolder, subfolder))]
     for comparisonScene in comparisonScenes:
         if comparisonScene not in captureScenes:
             os.removedirs(path.join(comparisonDataFolder, comparisonScene))
+    
+    print(f"Finished gathering comparison data in {comparisonDataFolder}\n")
 
 
 def CreateComparisonFigures():
@@ -668,9 +672,10 @@ def CreateComparisonFigures():
     with open(comparisonsJsonPath, "r") as file:
         comparisonsDict = json.load(file)
 
+    print("Generating Comparison Figures")
+
     for scene in scenes:
         sceneFolder = path.join(comparisonDataFolder, scene)
-        print(f"{sceneFolder}")
         schemes = [subfolder for subfolder in os.listdir(sceneFolder) if path.isdir(path.join(sceneFolder, subfolder))]
         imagesDict[scene] = dict()
 
@@ -688,8 +693,6 @@ def CreateComparisonFigures():
             continue
             
         for comparison in comparisonsDict[scene].keys():
-            print(f"{scene}\\{comparison}")
-
             regionCount = len(comparisonsDict[scene][comparison].keys())
             heightRatios = [1 for regionKey in comparisonsDict[scene][comparison].keys()]
             schemeCount = len(schemes)
@@ -755,13 +758,15 @@ def CreateComparisonFigures():
 
             figureName = f"{scene}_{comparison}_Bottom.pdf"
             plt.savefig(path.join(exportFolder, figureName), bbox_inches="tight", dpi=300, pad_inches=0, format="pdf")
+            print(f"Generated {figureName}")
 
+    print("Finished Generating Comparison Figures\n")
+    
 
 def main():
-    # ExportErrorMetrics()
+    ExportErrorMetrics()
     ExportAverageErrorMetrics()
     ExportAverageProfilerData()
-    GenerateGraphsDict()
     ExportGraphs()
     ExportTableData()
     GatherComparisonData()
