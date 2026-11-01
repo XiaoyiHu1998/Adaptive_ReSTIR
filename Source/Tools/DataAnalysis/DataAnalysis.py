@@ -592,7 +592,7 @@ def ExportTableData():
 
 
 def main():
-    # ExportErrorMetrics()
+    ExportErrorMetrics()
     ExportAverageErrorMetrics()
     ExportAverageProfilerData()
     GenerateGraphsDict()
