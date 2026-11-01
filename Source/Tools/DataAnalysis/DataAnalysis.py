@@ -177,12 +177,14 @@ def ExportAverageErrorMetrics():
                     rmse += (1.0 / float(dictCount)) * float(dictList[dictIndex]["rmse"][frameIndex])
                     mape += (1.0 / float(dictCount)) * float(dictList[dictIndex]["mape"][frameIndex])
                     flip += (1.0 / float(dictCount)) * float(dictList[dictIndex]["flip"][frameIndex])
+
+                floorNoise = lambda averageError : 0.0 if averageError < 0.0001 else averageError
     
-                averageMAE.append(mae)
-                averageMSE.append(mse)
-                averageRMSE.append(rmse)
-                averageMAPE.append(mape)
-                averageFLIP.append(flip)
+                averageMAE.append(floorNoise(mae))
+                averageMSE.append(floorNoise(mse))
+                averageRMSE.append(floorNoise(rmse))
+                averageMAPE.append(floorNoise(mape))
+                averageFLIP.append(floorNoise(flip))
 
             averageErrorDict = dict()
             averageErrorDict["frameCount"] = minFrameCount
@@ -360,23 +362,19 @@ def GenerateGraphsDict():
             frameErrorDict = frameDataDict[scene][restirScheme]
             profilerDict = profilerDataDict[scene][restirScheme]
 
-            errorPlotFrameCount = min(frameErrorDict["frameCount"], profilerDict["frameCount"])
-
             frameTimes = profilerDict["ReSTIRPTPass"]
-            frametimesReSTIROverhead = [total - tracePass for (total, tracePass) in zip(profilerDict["ReSTIRPTPass"], profilerDict["tracePass"]) if total > 0.0]
+            frameTimes = [frameTime for frameTime in frameTimes if frameTime > 0.0 and frameTime < 500.0]
+            frameCount = len(frameTimes)
+            frametimesReSTIROverhead = [total - tracePass for (total, tracePass) in zip(profilerDict["ReSTIRPTPass"], profilerDict["tracePass"]) if total > 0.0 and total < 500.0]
             cumulativeFrameTimes = []
             frameTimeSum = 0.0
-            emptyFrameCount = 0
-            for i in range(len(frameTimes)):
-                if frameTimes[i] == 0.0:
-                    emptyFrameCount += 1
-                    continue
-                else:
-                    frameTimeSum += frameTimes[i]
 
+            for i in range(len(frameTimes)):
+                frameTimeSum += frameTimes[i]
                 cumulativeFrameTimes.append(frameTimeSum)
 
-            errorPlotFrameCount -= emptyFrameCount
+            errorPlotFrameCount = min(frameErrorDict["frameCount"], profilerDict["frameCount"])
+            errorPlotFrameCount = min(errorPlotFrameCount, frameCount)
 
             errorMAE = frameErrorDict["mae"][0:errorPlotFrameCount]
             errorMSE = frameErrorDict["mse"][0:errorPlotFrameCount]
@@ -385,7 +383,7 @@ def GenerateGraphsDict():
             errorFLIP = frameErrorDict["flip"][0:errorPlotFrameCount]
 
             errorFrameTimes = cumulativeFrameTimes[0:errorPlotFrameCount]
-            graphsDict[scene][restirScheme]["frametimes"] = (cumulativeFrameTimes, frameTimes[emptyFrameCount:])
+            graphsDict[scene][restirScheme]["frametimes"] = (cumulativeFrameTimes, frameTimes)
             graphsDict[scene][restirScheme]["MAE"] = (errorFrameTimes, errorMAE)
             graphsDict[scene][restirScheme]["MSE"] = (errorFrameTimes, errorMSE)
             graphsDict[scene][restirScheme]["RMSE"] = (errorFrameTimes, errorRMSE)
@@ -404,13 +402,14 @@ def ExportGraphs():
 
     graphsDict = GenerateGraphsDict()
 
-    figuresPath = path.join(baseFolder, "Figures")
+    figuresPath = path.join(path.join(baseFolder, "Figures"), "Graphs")
     if not path.exists(figuresPath):
-        os.mkdir(figuresPath)
+        os.makedirs(figuresPath)
 
     print("Generating graphs")
     for scene in graphsDict.keys():
         restirSchemes = sorted(graphsDict[scene].keys())
+        animatedScene = "Animated" in scene
 
         # Frametime graph naive schemes
         fig, ax = plt.subplots()
@@ -424,6 +423,8 @@ def ExportGraphs():
                 if restirScheme == "Naive - OneSixteenth":
                     cumulativeFrameTimes, frametimesReSTIROverhead = graphsDict[scene][restirScheme]["frametimesReSTIROverhead"]
                     line, = ax.plot(cumulativeFrameTimes, frametimesReSTIROverhead, label="Naive - 1/16 No Rays")
+                    line.set_dashes([4, 4])
+                    line.set_dash_capstyle("round")
 
                 # if "Naive" in restirScheme and not "Full" in restirScheme:
                 #     line.set_dashes([4, 4])
@@ -434,18 +435,25 @@ def ExportGraphs():
         ax.set_ybound(lower=0)
         ax.grid()
         ax.legend()
-        figureName = f"NaiveSchemes_FrameTimes_{scene}.png"
-        fig.savefig(path.join(figuresPath, figureName))
+        figureName = f"NaiveSchemes_FrameTimes_{scene}.pdf"
+        fig.savefig(path.join(figuresPath, figureName), bbox_inches="tight", format="pdf")
         print(f"Exported {figureName}")
 
         # Frametime graph main schemes
         fig, ax = plt.subplots()
         for restirScheme in restirSchemes:
-            includedSchemes = ["TileBased", "PerPixel", "Naive - Full", "Naive - Quarter", "Naive - OneEighth"]
+            includedSchemes = ["TileBased", "PerPixel", "Naive - Full", "Naive - Quarter", "Naive - OneEighth", "Naive - OneSixteenth"]
 
             if restirScheme in includedSchemes:
-                cumulativeFrameTimes, frametimes = graphsDict[scene][restirScheme]["frametimes"]
-                line, = ax.plot(cumulativeFrameTimes, frametimes, label=naiveSchemeToGraphLabel(restirScheme))
+                if restirScheme !="Naive - OneSixteenth":
+                    cumulativeFrameTimes, frametimes = graphsDict[scene][restirScheme]["frametimes"]
+                    line, = ax.plot(cumulativeFrameTimes, frametimes, label=naiveSchemeToGraphLabel(restirScheme))
+
+                if restirScheme == "Naive - OneSixteenth":
+                    cumulativeFrameTimes, frametimesReSTIROverhead = graphsDict[scene][restirScheme]["frametimesReSTIROverhead"]
+                    line, = ax.plot(cumulativeFrameTimes, frametimesReSTIROverhead, label="Naive - 1/16 No Rays")
+                    line.set_dashes([4, 4])
+                    line.set_dash_capstyle("round")
 
                 if "Naive" in restirScheme and not "Full" in restirScheme:
                     line.set_dashes([4, 4])
@@ -456,8 +464,8 @@ def ExportGraphs():
         ax.set_ybound(lower=0)
         ax.grid()
         ax.legend()
-        figureName = f"MainSchemes_FrameTimes_{scene}.png"
-        fig.savefig(path.join(figuresPath, figureName))
+        figureName = f"MainSchemes_FrameTimes_{scene}.pdf"
+        fig.savefig(path.join(figuresPath, figureName), bbox_inches="tight", format="pdf")
         print(f"Exported {figureName}")
 
         # Error Metrics Naive Scheme
@@ -467,18 +475,31 @@ def ExportGraphs():
 
             excludedSchemes = ["TileBased", "PerPixel", "PerPixel - RISGuarantee"]
 
+            upperBoundX = sys.maxsize
             for restirScheme in restirSchemes:
                 if restirScheme not in excludedSchemes:
                     cumulativeFrameTimes, errorValue = graphsDict[scene][restirScheme][errorMetric]
-                    line, = ax.semilogy(cumulativeFrameTimes, errorValue, label=naiveSchemeToGraphLabel(restirScheme))
+                    xValues = cumulativeFrameTimes
 
-            ax.set(xlabel="time (ms)", ylabel=f"{errorMetric}", title=f"Naive schemes {errorMetric} ({scene})")
-            ax.set_xbound(lower=0, upper=2000)
+                    if animatedScene:
+                        xValues = list(range(len(errorValue)))
+
+                    if(len(xValues) != len(errorValue)):
+                        print(f"ERROR Inconsistent X and Y Axis Value Count: MainSchemes_{errorMetric}_{scene}.pdf")
+                        continue
+
+                    upperBoundX = min(upperBoundX, xValues[-1])
+                    line, = ax.semilogy(xValues, errorValue, label=naiveSchemeToGraphLabel(restirScheme))
+
+            xLabel = "Frame" if animatedScene else "time (ms)"
+            ax.set(xlabel=xLabel, ylabel=f"{errorMetric}", title=f"Naive schemes {errorMetric} ({scene})")
+            ax.set_xbound(lower=0, upper=upperBoundX)
             ax.set_ybound(lower=0)
             ax.grid()
+            ax.grid(which="minor", color="0.9")
             ax.legend()
-            figureName = f"NaiveSchemes_{errorMetric}_{scene}.png"
-            fig.savefig(path.join(figuresPath, figureName))
+            figureName = f"NaiveSchemes_{errorMetric}_{scene}.pdf"
+            fig.savefig(path.join(figuresPath, figureName), bbox_inches="tight", format="pdf")
             print(f"Exported {figureName}")
 
         # Error Metrics Main Schemes
@@ -488,22 +509,35 @@ def ExportGraphs():
 
             includedSchemes = ["TileBased", "PerPixel", "Naive - Full", "Naive - Quarter", "Naive - OneEighth"]
 
+            upperBoundX = sys.maxsize
             for restirScheme in restirSchemes:
                 if restirScheme in includedSchemes:
                     cumulativeFrameTimes, errorValue = graphsDict[scene][restirScheme][errorMetric]
-                    line, = ax.semilogy(cumulativeFrameTimes, errorValue, label=naiveSchemeToGraphLabel(restirScheme))
+                    xValues = cumulativeFrameTimes
+
+                    if animatedScene:
+                        xValues = list(range(len(errorValue)))
+
+                    if(len(xValues) != len(errorValue)):
+                        print(f"ERROR Inconsistent X and Y Axis Value Count: MainSchemes_{errorMetric}_{scene}.pdf")
+                        continue
+
+                    upperBoundX = min(upperBoundX, xValues[-1])
+                    line, = ax.semilogy(xValues, errorValue, label=naiveSchemeToGraphLabel(restirScheme))
 
                     if "Naive" in restirScheme and not "Full" in restirScheme:
                         line.set_dashes([4, 4])
                         line.set_dash_capstyle("round")
 
-            ax.set(xlabel="time (ms)", ylabel=f"{errorMetric}", title=f"Main schemes {errorMetric} ({scene})")
-            ax.set_xbound(lower=0, upper=2000)
+            xLabel = "Frame" if animatedScene else "time (ms)"
+            ax.set(xlabel=xLabel, ylabel=f"{errorMetric}", title=f"Main schemes {errorMetric} ({scene})")
+            ax.set_xbound(lower=0, upper=upperBoundX)
             ax.set_ybound(lower=0)
             ax.grid()
+            ax.grid(which="minor", color="0.9")
             ax.legend()
-            figureName = f"MainSchemes_{errorMetric}_{scene}.png"
-            fig.savefig(path.join(figuresPath, figureName))
+            figureName = f"MainSchemes_{errorMetric}_{scene}.pdf"
+            fig.savefig(path.join(figuresPath, figureName), bbox_inches="tight", format="pdf")
             print(f"Exported {figureName}")
 
     print("Finished Exporting Graphs\n")
@@ -558,7 +592,7 @@ def ExportTableData():
 
 
 def main():
-    ExportErrorMetrics()
+    # ExportErrorMetrics()
     ExportAverageErrorMetrics()
     ExportAverageProfilerData()
     GenerateGraphsDict()
