@@ -6,6 +6,8 @@ import sys
 import matplotlib.pyplot as plt
 import statistics as st
 from concurrent.futures import ThreadPoolExecutor
+from PIL import Image
+import matplotlib.patches as patches
 
 
 def ExecuteImageCompareCall(commandList):
@@ -591,13 +593,179 @@ def ExportTableData():
     print(f"Exported {exportDictName}")
 
 
+def GatherComparisonData():
+    baseFolder = sys.argv[1]
+    capturesFolder = path.join(baseFolder, "Captures")
+    comparisonDataFolder = path.join(baseFolder, "ComparisonData")
+
+    captureScenes = [subfolder for subfolder in os.listdir(capturesFolder) if path.isdir(path.join(capturesFolder, subfolder))]
+    for captureScene in captureScenes:
+        sceneFolder = path.join(comparisonDataFolder, captureScene)
+        if not path.exists(sceneFolder):
+            os.mkdir(sceneFolder)
+
+        captureSceneFolder = path.join(capturesFolder, captureScene)
+        schemes = [subfolder for subfolder in os.listdir(captureSceneFolder) if subfolder.split("_")[-1] == "1" or subfolder == "Reference"]
+        for scheme in schemes:
+            print(f"{captureScene}\\{scheme}")
+            schemeFolder = path.join(path.join(capturesFolder, captureScene), scheme)
+            frames = sorted([file for file in os.listdir(schemeFolder) if path.isfile(path.join(schemeFolder, file)) and file.split(".")[-1] == "png"])
+            lastFrame= frames[-1]
+            lastFramePath = path.join(schemeFolder, lastFrame)
+
+            schemeName = scheme.split("_")[0]
+            comparisonSchemeFolder = path.join(path.join(comparisonDataFolder, captureScene), schemeName)
+            if not path.exists(comparisonSchemeFolder):
+                os.makedirs(comparisonSchemeFolder)
+            shutil.copy2(lastFramePath, path.join(comparisonSchemeFolder, lastFrame))
+            
+            renamedFile = path.join(comparisonSchemeFolder, f"{captureScene}_{schemeName}.png")
+            if path.exists(renamedFile):
+                os.remove(renamedFile)
+            os.rename(path.join(comparisonSchemeFolder, lastFrame), renamedFile)
+
+            if scheme != "Reference":
+                flipFolder = path.join(schemeFolder, "Flip")
+                flipFrames =  sorted([file for file in os.listdir(flipFolder) if path.isfile(path.join(flipFolder, file)) and file.split(".")[-1] == "png"])
+                lastFlipFrame = flipFrames[-1]
+                lastFlipFramePath = path.join(flipFolder, lastFlipFrame)
+                comparisonFlipFolder = path.join(comparisonSchemeFolder, "Flip")
+                if not path.exists(comparisonFlipFolder):
+                    os.makedirs(comparisonFlipFolder)
+                shutil.copy2(lastFlipFramePath, path.join(comparisonFlipFolder, lastFlipFrame))
+
+                renamedFlipFile = path.join(comparisonFlipFolder, f"{captureScene}_{schemeName}_FLIP.png")
+                if path.exists(renamedFlipFile):
+                    os.remove(renamedFlipFile)
+                os.rename(path.join(comparisonFlipFolder, lastFlipFrame), renamedFlipFile)
+
+
+    comparisonScenes = [subfolder for subfolder in os.listdir(comparisonDataFolder) if path.isdir(path.join(comparisonDataFolder, subfolder))]
+    for comparisonScene in comparisonScenes:
+        if comparisonScene not in captureScenes:
+            os.removedirs(path.join(comparisonDataFolder, comparisonScene))
+
+
+def CreateComparisonFigures():
+    baseFolder = sys.argv[1]
+    exportFolder = path.join(path.join(baseFolder, "Figures"), "Comparisons")
+    comparisonDataFolder = path.join(baseFolder, "ComparisonData")
+
+    if not path.exists(exportFolder):
+        os.makedirs(exportFolder)
+
+    scenes = [subfolder for subfolder in os.listdir(comparisonDataFolder) if path.isdir(path.join(comparisonDataFolder, subfolder))]
+    imagesDict = {}
+
+    schemeFontSize = 14
+    regionFontSize = 16
+
+    comparisonsDict = dict()
+    comparisonsJsonPath = path.join(comparisonDataFolder, "comparisons.json")
+    if not path.exists(comparisonsJsonPath):
+        return
+
+    with open(comparisonsJsonPath, "r") as file:
+        comparisonsDict = json.load(file)
+
+    for scene in scenes:
+        sceneFolder = path.join(comparisonDataFolder, scene)
+        print(f"{sceneFolder}")
+        schemes = [subfolder for subfolder in os.listdir(sceneFolder) if path.isdir(path.join(sceneFolder, subfolder))]
+        imagesDict[scene] = dict()
+
+        for scheme in schemes:
+            schemeFolder = path.join(sceneFolder, scheme)
+            imageName = [file for file in os.listdir(schemeFolder) if path.isfile(path.join(schemeFolder, file))][0]
+            imagesDict[scene][scheme] = dict()
+            imagesDict[scene][scheme]["Frame"] = Image.open(path.join(schemeFolder, imageName)).convert("RGB")
+
+            if scheme != "Reference":
+                flipImageName = imageName.split(".")[0] + "_FLIP.png"
+                imagesDict[scene][scheme]["Flip"] = Image.open(path.join(path.join(schemeFolder, "Flip"), flipImageName)).convert("RGB")
+
+        if scene not in comparisonsDict.keys():
+            continue
+            
+        for comparison in comparisonsDict[scene].keys():
+            print(f"{scene}\\{comparison}")
+
+            regionCount = len(comparisonsDict[scene][comparison].keys())
+            heightRatios = [1 for regionKey in comparisonsDict[scene][comparison].keys()]
+            schemeCount = len(schemes)
+
+            figure = plt.figure(figsize=[1920, 1080, "px"])
+            gs = figure.add_gridspec(1, 1, height_ratios=[1], hspace=0, wspace=0)
+            ax_main = figure.add_subplot(gs[0, :])
+            ax_main.imshow(imagesDict[scene]["Reference"]["Frame"])
+            ax_main.axis("off")
+            ax_main.margins(0)
+            
+            boxColors = ["red", "green", "blue", "yellow"]
+            for (region, color) in zip(comparisonsDict[scene][comparison].keys(), boxColors):
+                xStart, xEnd, yStart, yEnd = tuple(comparisonsDict[scene][comparison][region])
+                regionBox = patches.Rectangle((xStart, yStart), xEnd - xStart, yEnd - yStart, linewidth=5, edgecolor=color, facecolor="none")
+                ax_main.add_patch(regionBox)
+
+            figureName = f"{scene}_{comparison}_Top.pdf"
+            plt.savefig(path.join(exportFolder, figureName), bbox_inches="tight", dpi="figure", pad_inches=0, format="pdf")
+
+            comparisonCount = len(comparisonsDict[scene][comparison].items())
+            figHeight = 347 * comparisonCount
+            figure = plt.figure(figsize=[1548, figHeight, "px"])
+            gs = figure.add_gridspec(regionCount * 2, schemeCount, height_ratios=heightRatios + heightRatios, hspace=0, wspace=0)
+            for row, (region, regionCoords) in enumerate(comparisonsDict[scene][comparison].items(), start=0):
+                row = row * 2
+                cropCoords = (regionCoords[0], regionCoords[2], regionCoords[1], regionCoords[3])
+
+                schemeOrder = ["Naive - OneSixteenth", "Naive - OneEighth", "Naive - Quarter", "Naive - Half", "Naive - ThreeQuarters", "Naive - Full", "PerPixel", "TileBased", "Reference"]
+                schemeNames = ["Naive - 1/16", "Naive - 1/8", "Naive - 1/4", "Naive - 1/2", "Naive - 3/4", "Naive - Full", "PerPixel", "TileBased", "Reference"]
+
+                schemeOrder = list(reversed(schemeOrder))
+                schemeNames = list(reversed(schemeNames))
+
+                for i in range(len(schemeOrder)):
+                    image = imagesDict[scene][schemeOrder[i]]["Frame"]
+                    croppedImage = image.crop(cropCoords)
+
+                    ax = figure.add_subplot(gs[row, i])
+                    ax.imshow(croppedImage)
+                    ax.margins(0)
+                    ax.axis("off")
+
+                    if row == 0:
+                        ax.set_title(schemeNames[i], fontsize=schemeFontSize)
+
+                    if i == 0 and row % 2 == 0:
+                        ax.text(-0.05, 0.5, region, transform=ax.transAxes, va="center", ha="right", fontsize=regionFontSize)
+                    
+
+                row += 1
+                for i in range(len(schemeOrder)):
+                    if schemeOrder[i] == "Reference":
+                        continue
+
+                    image = imagesDict[scene][schemeOrder[i]]["Flip"]
+                    croppedImage = image.crop(cropCoords)
+
+                    ax = figure.add_subplot(gs[row, i])
+                    ax.imshow(croppedImage)
+                    ax.margins(0)
+                    ax.axis("off")
+
+            figureName = f"{scene}_{comparison}_Bottom.pdf"
+            plt.savefig(path.join(exportFolder, figureName), bbox_inches="tight", dpi=300, pad_inches=0, format="pdf")
+
+
 def main():
-    ExportErrorMetrics()
+    # ExportErrorMetrics()
     ExportAverageErrorMetrics()
     ExportAverageProfilerData()
     GenerateGraphsDict()
     ExportGraphs()
     ExportTableData()
+    GatherComparisonData()
+    CreateComparisonFigures()
 
 
 if __name__ == "__main__":
