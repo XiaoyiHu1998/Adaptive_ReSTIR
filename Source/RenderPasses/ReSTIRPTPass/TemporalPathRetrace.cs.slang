@@ -141,7 +141,7 @@ struct PathRetracePass
     */
     void execute(const uint2 _pixel)
     {
-        uint2 pixel = _pixel;
+        const uint2 pixel = _pixel;
 
         if (any(pixel >= params.frameDim)) return;
 

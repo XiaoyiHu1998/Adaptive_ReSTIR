@@ -10,9 +10,6 @@ namespace
     const char kDesc[] = "Path tracer using DXR 1.1 TraceRayInline";
 
     const std::string kGeneratePathsFilename = "RenderPasses/ReSTIRPTPass/GeneratePaths.cs.slang";
-    const std::string kGeneratePathsNaiveFilename = "RenderPasses/ReSTIRPTPass/GeneratePathsNaive.cs.slang";
-    const std::string kGeneratePathsPerPixelFilename = "RenderPasses/ReSTIRPTPass/GeneratePathsPerPixel.cs.slang";
-    const std::string kGeneratePathsTileBasedFilename = "RenderPasses/ReSTIRPTPass/GeneratePathsTilebased.cs.slang";
     const std::string kTracePassFilename = "RenderPasses/ReSTIRPTPass/TracePass.cs.slang";
     const std::string kReflectTypesFile = "RenderPasses/ReSTIRPTPass/ReflectTypes.cs.slang";
     const std::string kSpatialReusePassFile = "RenderPasses/ReSTIRPTPass/SpatialReuse.cs.slang";
@@ -141,27 +138,6 @@ namespace
         { (uint32_t)PathSamplingMode::PathReuse, "Bekaert-style Path Reuse" },
         { (uint32_t)PathSamplingMode::PathTracing, "Path Tracing" }
     };
-
-    const Gui::DropdownList kAdaptiveRIS =
-    {
-        {(uint)AdaptiveRIS::Naive, "Naive"},
-        {(uint)AdaptiveRIS::PerPixel, "Per-Pixel"},
-        {(uint)AdaptiveRIS::TileBased, "Tile-Based"}
-    };
-
-    // Adaptive ReSTIR Naive Generation Scheme
-    const Gui::DropdownList kSamplingRateRIS =
-    {
-        {(uint)SamplingRateRIS::Full, "Full"},
-        {(uint)SamplingRateRIS::ThreeQuarter, "ThreeQuarter: 3/4"},
-        {(uint)SamplingRateRIS::Half, "Half: 1/2"},
-        {(uint)SamplingRateRIS::Quarter, "Quarter: 1/4"},
-        {(uint)SamplingRateRIS::OneEigth, "OneEigth: 1/8"},
-        {(uint)SamplingRateRIS::OneSixteenth, "OneSixteenth: 1/16"}
-    };
-
-    const std::string kEnableAdaptiveRIS = "enableAdaptiveRIS";
-    const std::string kEnableAdaptiveTemporalReuse = "enableAdaptiveTemporalReuse";
 
     // Scripting options.
     const std::string kSamplesPerPixel = "samplesPerPixel";
@@ -355,9 +331,6 @@ ReSTIRPTPass::ReSTIRPTPass(const Dictionary& dict)
     auto defines = mStaticParams.getDefines(*this);
 
     mpGeneratePaths = ComputePass::create(kGeneratePathsFilename, "main", defines, false);
-    mpGeneratePathsNaive = ComputePass::create(kGeneratePathsNaiveFilename, "main", defines, false);
-    mpGeneratePathsPerPixel = ComputePass::create(kGeneratePathsPerPixelFilename, "main", defines, false);
-    mpGeneratePathsTileBased = ComputePass::create(kGeneratePathsTileBasedFilename, "main", defines, false);
     mpReflectTypes = ComputePass::create(kReflectTypesFile, "main", defines, false);
 
     {
@@ -682,9 +655,6 @@ void ReSTIRPTPass::setScene(RenderContext* pRenderContext, const Scene::SharedPt
         Shader::DefineList defines = mpScene->getSceneDefines();
 
         mpGeneratePaths->getProgram()->addDefines(defines);
-        mpGeneratePathsNaive->getProgram()->addDefines(defines);
-        mpGeneratePathsPerPixel->getProgram()->addDefines(defines);
-        mpGeneratePathsTileBased->getProgram()->addDefines(defines);
         mpTracePass->getProgram()->addDefines(defines);
         mpReflectTypes->getProgram()->addDefines(defines);
 
@@ -723,7 +693,6 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
         mStaticParams.temporalMisKind = ReSTIRMISKind::Talbot;
     }
 
-    //TODO: change this for Adaptive ReSTIR
     uint32_t numPasses = mStaticParams.pathSamplingMode == PathSamplingMode::PathTracing ? 1 : mStaticParams.samplesPerPixel;
 
     for (uint32_t restir_i = 0; restir_i < numPasses; restir_i++)
@@ -748,66 +717,28 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
                 pRenderContext->clearUAV(texture->getUAV().get(), uint4(0));
             }
 
-            // Streaming RIS pass
             {
                 assert(mpCounters);
                 pRenderContext->clearUAV(mpCounters->getUAV().get(), uint4(0));
 
                 mpPathTracerBlock->getRootVar()["gSppId"] = restir_i;
                 mpPathTracerBlock->getRootVar()["gNumSpatialRounds"] = mNumSpatialRounds;
-                mRISPathIDs->setElement(0, 0u);
-                mPixelCandidateStatus->setElement(0, 0u);
 
                 if (restir_i == 0)
-                {
-                    if (!mEnableAdaptiveRIS || mAdaptiveRISScheme == AdaptiveRIS::Naive)
-                    {
-                        generatePathsNaive(pRenderContext, renderData, 0);
-                    }
-                    else if (mAdaptiveRISScheme == AdaptiveRIS::PerPixel)
-                    {
-                        generatePathsPerPixel(pRenderContext, renderData, 0);
-                    }
-                    else if (mAdaptiveRISScheme == AdaptiveRIS::TileBased)
-                    {
-                        generatePathsTileBased(pRenderContext, renderData, 0);
-                    }
-                }
+                    // Generate paths at primary hits.
+                    generatePaths(pRenderContext, renderData, 0);
 
                 // Launch main trace pass.
                 tracePass(pRenderContext, renderData, mpTracePass, "tracePass", 0);
             }
         }
 
-        //Adaptive ReSTIR Temporal Reuse pass
         if (mStaticParams.pathSamplingMode != PathSamplingMode::PathTracing)
         {
             // Launch restir merge pass.
             if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
             {
-                if (mEnableAdaptiveTemporalReuse && mValidAdaptiveHistory)
-                {
-                    if (mStaticParams.shiftStrategy == ShiftMapping::Hybrid)
-                        PathRetracePass(pRenderContext, restir_i, renderData, true, 0);
-                    // a separate pass to trace rays for hybrid shift/random number replay
-                    PathReusePass(pRenderContext, restir_i, renderData, true, 0, !mEnableSpatialReuse, skipTemporalReuse);
-
-                    // Per pixel and Tile based path generation use seperate pass for non RIS candidates
-                    // if (mEnableAdaptiveRISPerPixel || mEnableAdaptiveRISTileBased)
-                    //     PathReusePass(pRenderContext, restir_i, renderData, true, 0, !mEnableSpatialReuse);
-                }
-
-                mValidAdaptiveHistory = mEnableAdaptiveTemporalReuse;
-            }
-        }
-
-        // Regular ReSTIR SpatioTemporal reuse passes
-        if (mStaticParams.pathSamplingMode != PathSamplingMode::PathTracing)
-        {
-            // Launch restir merge pass.
-            if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
-            {
-                if (mEnableTemporalReuse && !skipTemporalReuse && !mEnableAdaptiveTemporalReuse)
+                if (mEnableTemporalReuse && !skipTemporalReuse)
                 {
                     if (mStaticParams.shiftStrategy == ShiftMapping::Hybrid)
                         PathRetracePass(pRenderContext, restir_i, renderData, true, 0);
@@ -835,7 +766,7 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
             if (restir_i == numPasses - 1)
                 mReservoirFrameCount++; // mark as at least one temporally reused frame
 
-            if ((mEnableTemporalReuse || mEnableAdaptiveTemporalReuse) && mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
+            if (mEnableTemporalReuse && mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
             {
                 if ((!mEnableSpatialReuse || mNumSpatialRounds % 2 == 0))
                     pRenderContext->copyResource(mpTemporalReservoirs[restir_i].get(), mpOutputReservoirs.get());
@@ -978,63 +909,10 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
             }
         }
 
-        // Adaptive ReSTIR
-        dirty |= widget.checkbox("Adaptive RIS", mEnableAdaptiveRIS);
-        if (mEnableAdaptiveRIS)
-        {
-            if (auto group = widget.group("Adaptive RIS Parameters", true))
-            {
-                dirty |= widget.dropdown("Scheme", kAdaptiveRIS, reinterpret_cast<uint32_t&>(mAdaptiveRISScheme));
-
-                switch (mAdaptiveRISScheme)
-                {
-                case AdaptiveRIS::Naive:
-                    dirty |= widget.dropdown("Sampling Rate", kSamplingRateRIS, reinterpret_cast<uint32_t&>(mSamplingRateRIS));
-                    break;
-                case AdaptiveRIS::PerPixel:
-                    dirty |= widget.var("Min Chance", mAdaptiveMinPerPixelRISRate);
-                    dirty |= widget.var("Max Chance", mAdaptiveMaxPerPixelRISRate);
-                    dirty |= widget.var("Min Motion Distance", mMinMotionDistancePerPixel);
-                    dirty |= widget.var("Max Motion Distance", mMaxMotionDistancePerPixel);
-                    dirty |= widget.var("Max Motion Sampling Chance", mMaxMotionSamplingChancePerPixel);
-                    dirty |= widget.checkbox("Duplication Mapping", mEnableDuplicationMapping);
-                    dirty |= widget.var("Duplication Mapping Alpha", mDuplicationMappingAlpha);
-                    break;
-                case AdaptiveRIS::TileBased:
-                    dirty |= widget.dropdown("Min Tile RIS Rate", kSamplingRateRIS, reinterpret_cast<uint32_t&>(mAdaptiveRISTileBasedMinRate));
-                    dirty |= widget.var("Min Motion Distance", mMinMotionDistanceTileBased);
-                    dirty |= widget.var("Max Motion Distance", mMaxMotionDistanceTileBased);
-                    dirty |= widget.var("Max Motion Sampling Chance", mMaxMotionSamplingChanceTileBased);
-                    dirty |= widget.checkbox("Duplication Mapping", mEnableDuplicationMapping);
-                    dirty |= widget.var("Duplication Mapping Alpha", mDuplicationMappingAlpha);
-                    break;
-                default:
-                    break;
-                }
-            }
-        }
-
-        if (widget.checkbox("Adaptive Temporal Reuse", mEnableAdaptiveTemporalReuse))
-        {
-            dirty = true;
-            mEnableTemporalReuse &= !mEnableAdaptiveTemporalReuse;
-        }
-
-        if (mEnableAdaptiveTemporalReuse)
-        {
-            dirty |= widget.var("Adaptive Temporal History Cap", mAdaptiveTemporalHistoryCap, 0.0f, 100.0f);
-        }
-
-
-        // ReSTIR PT
         if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
         {
-            if (widget.checkbox("Temporal Reuse (Incompatible with Adaptive RIS)", mEnableTemporalReuse))
-            {
-                dirty = true;
-                mEnableAdaptiveTemporalReuse &= !mEnableTemporalReuse;
-            }
             dirty |= widget.checkbox("Spatial Reuse", mEnableSpatialReuse);
+            dirty |= widget.checkbox("Temporal Reuse", mEnableTemporalReuse);
         }
 
         if (mStaticParams.pathSamplingMode == PathSamplingMode::PathReuse)
@@ -1064,7 +942,7 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
             }
         }
 
-        if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR && (mEnableTemporalReuse || mEnableAdaptiveTemporalReuse))
+        if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR && mEnableTemporalReuse)
         {
             if (auto group = widget.group("Temporal reuse controls", true))
             {
@@ -1282,9 +1160,6 @@ void ReSTIRPTPass::updatePrograms()
 
     // Update program specialization. This is done through defines in lieu of specialization constants.
     mpGeneratePaths->getProgram()->addDefines(defines);
-    mpGeneratePathsNaive->getProgram()->addDefines(defines);
-    mpGeneratePathsPerPixel->getProgram()->addDefines(defines);
-    mpGeneratePathsTileBased->getProgram()->addDefines(defines);
     mpTracePass->getProgram()->addDefines(defines);
     mpReflectTypes->getProgram()->addDefines(defines);
     mpSpatialPathRetracePass->getProgram()->addDefines(defines);
@@ -1296,9 +1171,6 @@ void ReSTIRPTPass::updatePrograms()
     // Recreate program vars. This may trigger recompilation if needed.
     // Note that program versions are cached, so switching to a previously used specialization is faster.
     mpGeneratePaths->setVars(nullptr);
-    mpGeneratePathsNaive->setVars(nullptr);
-    mpGeneratePathsPerPixel->setVars(nullptr);
-    mpGeneratePathsTileBased->setVars(nullptr);
     mpTracePass->setVars(nullptr);
     mpReflectTypes->setVars(nullptr);
     mpSpatialPathRetracePass->setVars(nullptr);
@@ -1729,145 +1601,6 @@ void ReSTIRPTPass::generatePaths(RenderContext* pRenderContext, const RenderData
     mpGeneratePaths->execute(pRenderContext, { mParams.screenTiles.x * tileSize, mParams.screenTiles.y, 1u });
 }
 
-void ReSTIRPTPass::generatePathsNaive(RenderContext* pRenderContext, const RenderData& renderData, int sampleId)
-{
-    PROFILE("generatePathsNaive");
-
-    // Check shader assumptions.
-    // We launch one thread group per screen tile, with threads linearly indexed.
-    const uint32_t tileSize = kScreenTileDim.x * kScreenTileDim.y;
-    assert(kScreenTileDim.x == 16 && kScreenTileDim.y == 16); // TODO: Remove this temporary limitation when Slang bug has been fixed, see comments in shader.
-    assert(kScreenTileBits.x <= 4 && kScreenTileBits.y <= 4); // Since we use 8-bit deinterleave.
-    assert(mpGeneratePathsNaive->getThreadGroupSize().x == tileSize);
-    assert(mpGeneratePathsNaive->getThreadGroupSize().y == 1 && mpGeneratePathsNaive->getThreadGroupSize().z == 1);
-
-    // Additional specialization. This shouldn't change resource declarations.
-    mpGeneratePathsNaive->addDefine("OUTPUT_TIME", mOutputTime ? "1" : "0");
-    mpGeneratePathsNaive->addDefine("OUTPUT_NRD_DATA", mOutputNRDData ? "1" : "0");
-
-    // Bind resources.
-    auto var = mpGeneratePathsNaive->getRootVar()["CB"]["gPathGenerator"];
-    setShaderData(var, renderData, false, true);
-
-    mpGeneratePathsNaive["gScene"] = mpScene->getParameterBlock();
-    var["gSampleId"] = sampleId;
-    var["outputReservoirs"] = mpOutputReservoirs;
-
-        
-    uint frameSelectionShift = ((mReservoirFrameCount % 16) % 2) ? 0 : 16;
-    uint patternLevel = mEnableAdaptiveRIS ? mSamplingRateRIS : 0;
-    uint pattern = mPatterns[patternLevel][(mReservoirFrameCount % 16) / 2];
-    var["gGenerationPattern"] = pattern >> frameSelectionShift;
-    var["gRISPathIDs"] = mRISPathIDs->asBuffer();
-
-    // Launch one thread per pixel.
-    // The dimensions are padded to whole tiles to allow re-indexing the threads in the shader.
-    mpGeneratePathsNaive->execute(pRenderContext, { mParams.screenTiles.x * tileSize, mParams.screenTiles.y, 1u });
-}
-
-// TODO: make compatible with how TemporalReservoir buffers are used in ReusePass
-void ReSTIRPTPass::generatePathsPerPixel(RenderContext* pRenderContext, const RenderData& renderData, int sampleId)
-{
-    PROFILE("generatePathsPerPixel");
-
-    // Check shader assumptions.
-    // We launch one thread group per screen tile, with threads linearly indexed.
-    const uint32_t tileSize = kScreenTileDim.x * kScreenTileDim.y;
-    assert(kScreenTileDim.x == 16 && kScreenTileDim.y == 16); // TODO: Remove this temporary limitation when Slang bug has been fixed, see comments in shader.
-    assert(kScreenTileBits.x <= 4 && kScreenTileBits.y <= 4); // Since we use 8-bit deinterleave.
-    assert(mpGeneratePathsPerPixel->getThreadGroupSize().x == tileSize);
-    assert(mpGeneratePathsPerPixel->getThreadGroupSize().y == 1 && mpGeneratePathsPerPixel->getThreadGroupSize().z == 1);
-
-    // Additional specialization. This shouldn't change resource declarations.
-    mpGeneratePathsPerPixel->addDefine("OUTPUT_TIME", mOutputTime ? "1" : "0");
-    mpGeneratePathsPerPixel->addDefine("OUTPUT_NRD_DATA", mOutputNRDData ? "1" : "0");
-
-    // Bind resources.
-    auto var = mpGeneratePathsPerPixel->getRootVar()["CB"]["gPathGenerator"];
-    setShaderData(var, renderData, false, true);
-
-    mpGeneratePathsPerPixel["gScene"] = mpScene->getParameterBlock();
-    var["gSampleId"] = sampleId;
-    var["gRISPathIDs"] = mRISPathIDs->asBuffer();
-    var["gPixelCandidateStatus"] = mPixelCandidateStatus->asBuffer();
-    
-    var["outputReservoirs"] = mpOutputReservoirs;
-    var["temporalReservoirs"] = mpTemporalReservoirs[0];
-    var["motionVectors"] = renderData[kInputMotionVectors]->asTexture();
-    var["temporalVbuffer"] = mpTemporalVBuffer;
-    var["gEnableTemporalReprojection"] = mEnableTemporalReprojection;
-
-    var["gAdaptiveTemporalHistoryCap"] = mAdaptiveTemporalHistoryCap;
-    var["gAdaptiveMinPerPixelRISRate"] = mAdaptiveMinPerPixelRISRate;
-    var["gAdaptiveMaxPerPixelRISRate"] = mAdaptiveMaxPerPixelRISRate;
-    var["gNonRISFrameCounters"] = mNonRISFrameCounters;
-
-    var["gMinMotionDistance"] = mMinMotionDistancePerPixel;
-    var["gMaxMotionDistance"] = mMaxMotionDistancePerPixel;
-    var["gMaxMotionSamplingChance"] = mMaxMotionSamplingChancePerPixel;
-
-    var["gDuplicationMap"] = mDuplicationMap->asBuffer();
-    var["gEnableDuplicationMapping"] = mEnableDuplicationMapping;
-
-    // Launch one thread per pixel.
-    // The dimensions are padded to whole tiles to allow re-indexing the threads in the shader.
-    mpGeneratePathsPerPixel->execute(pRenderContext, { mParams.screenTiles.x * tileSize, mParams.screenTiles.y, 1u });
-}
-
-// TODO: make compatible with how TemporalReservoir buffers are used in ReusePass
-void ReSTIRPTPass::generatePathsTileBased(RenderContext* pRenderContext, const RenderData& renderData, int sampleId)
-{
-    PROFILE("generatePathsTileBased");
-
-    // Check shader assumptions.
-    // We launch one thread group per screen tile, with threads linearly indexed.
-    const uint32_t tileSize = kScreenTileDim.x * kScreenTileDim.y;
-    assert(kScreenTileDim.x == 16 && kScreenTileDim.y == 16); // TODO: Remove this temporary limitation when Slang bug has been fixed, see comments in shader.
-    assert(kScreenTileBits.x <= 4 && kScreenTileBits.y <= 4); // Since we use 8-bit deinterleave.
-    assert(mpGeneratePathsTileBased->getThreadGroupSize().x == tileSize);
-    assert(mpGeneratePathsTileBased->getThreadGroupSize().y == 1 && mpGeneratePathsTileBased->getThreadGroupSize().z == 1);
-
-    // Additional specialization. This shouldn't change resource declarations.
-    mpGeneratePathsTileBased->addDefine("OUTPUT_TIME", mOutputTime ? "1" : "0");
-    mpGeneratePathsTileBased->addDefine("OUTPUT_NRD_DATA", mOutputNRDData ? "1" : "0");
-
-    // Bind resources.
-    auto var = mpGeneratePathsTileBased->getRootVar()["CB"]["gPathGenerator"];
-    setShaderData(var, renderData, false, true);
-
-    mpGeneratePathsTileBased["gScene"] = mpScene->getParameterBlock();
-    var["gSampleId"] = sampleId;
-    var["gRISPathIDs"] = mRISPathIDs->asBuffer();
-    var["gPixelCandidateStatus"] = mPixelCandidateStatus->asBuffer();
-    
-    var["outputReservoirs"] = mpOutputReservoirs;
-    var["temporalReservoirs"] = mpTemporalReservoirs[0];
-    var["motionVectors"] = renderData[kInputMotionVectors]->asTexture();
-    var["temporalVbuffer"] = mpTemporalVBuffer;
-    var["gEnableTemporalReprojection"] = mEnableTemporalReprojection;
-
-    var["gAdaptiveTemporalHistoryCap"] = mAdaptiveTemporalHistoryCap;
-
-    var["gMinMotionDistance"] = mMinMotionDistanceTileBased;
-    var["gMaxMotionDistance"] = mMaxMotionDistanceTileBased;
-    var["gMaxMotionSamplingChance"] = mMaxMotionSamplingChanceTileBased;
-
-    var["gDuplicationMap"] = mDuplicationMap->asBuffer();
-    var["gEnableDuplicationMapping"] = mEnableDuplicationMapping;
-
-    uint frameSelectionShift = ((mReservoirFrameCount % 16) % 2) ? 0 : 16;
-    var["gPatternThreeQuarters"] = mPatterns[1][(mReservoirFrameCount % 16) / 2] >> frameSelectionShift;
-    var["gPatternHalf"] = mPatterns[2][(mReservoirFrameCount % 16) / 2] >> frameSelectionShift;
-    var["gPatternQuarter"] = mPatterns[3][(mReservoirFrameCount % 16) / 2] >> frameSelectionShift;
-    var["gPatternOneEight"] = mPatterns[4][(mReservoirFrameCount % 16) / 2] >> frameSelectionShift;
-    var["gPatternOneSixteenth"] = mPatterns[5][(mReservoirFrameCount % 16) / 2] >> frameSelectionShift;
-    var["gMinRate"] = mAdaptiveRISTileBasedMinRate;
-
-    // Launch one thread per pixel.
-    // The dimensions are padded to whole tiles to allow re-indexing the threads in the shader.
-    mpGeneratePathsTileBased->execute(pRenderContext, { mParams.screenTiles.x * tileSize, mParams.screenTiles.y, 1u });
-}
-
 void ReSTIRPTPass::tracePass(RenderContext* pRenderContext, const RenderData& renderData, const ComputePass::SharedPtr& pass, const std::string& passName, int sampleID)
 {
     PROFILE(passName);
@@ -1890,20 +1623,13 @@ void ReSTIRPTPass::tracePass(RenderContext* pRenderContext, const RenderData& re
     // Bind the path tracer.
     var["gPathTracer"] = mpPathTracerBlock;
     var["CB"]["gSampleId"] = sampleID;
-    var["CB"]["gMergePaths"] = mEnableAdaptiveTemporalReuse && mValidAdaptiveHistory ? 1 : 0;
-    var["gRISPathIDs"] = mRISPathIDs;
-    var["outputReservoirs"] = mpOutputReservoirs;
-    
-
-    // Debug
-    var["outputColor"] = renderData[kOutputColor]->asTexture();
 
     // Launch the threads.
     auto frameDim = renderData.getDefaultTextureDims();
     pass->execute(pRenderContext, uint3(frameDim, 1u));
 }
 
-void ReSTIRPTPass::PathReusePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool isTemporalReuse, int spatialRoundId, bool isLastRound, bool skipTemporalReuse)
+void ReSTIRPTPass::PathReusePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool isTemporalReuse, int spatialRoundId, bool isLastRound)
 {
     bool isPathReuseMISWeightComputation = spatialRoundId == -1;
 
@@ -1953,25 +1679,6 @@ void ReSTIRPTPass::PathReusePass(RenderContext* pRenderContext, uint32_t restir_
 
     if (isTemporalReuse)
     {
-        // Adaptive ReSTIR
-        var["gAdaptiveTemporalReuse"] = mEnableAdaptiveTemporalReuse;
-        var["gAdaptiveTemporalHistoryCap"] = mAdaptiveTemporalHistoryCap;
-        
-        uint frameSelectionShift = ((mReservoirFrameCount % 16) % 2) ? 0 : 16;
-        uint patternLevel = mEnableAdaptiveRIS ? mSamplingRateRIS : 0;
-        uint pattern = mPatterns[patternLevel][(mReservoirFrameCount % 16) / 2];
-        var["gGenerationPattern"] = pattern >> frameSelectionShift;
-        
-        var["gUsePathIDBuffers"] = mEnableAdaptiveRIS && (mAdaptiveRISScheme == AdaptiveRIS::PerPixel || mAdaptiveRISScheme == AdaptiveRIS::TileBased);
-        var["gRISPathIDs"] = mRISPathIDs->asBuffer();
-        var["gPixelCandidateStatus"] = mPixelCandidateStatus->asBuffer();
-        
-        var["gEnableDuplicationMapping"] = mEnableDuplicationMapping && mEnableAdaptiveRIS && (mAdaptiveRISScheme == AdaptiveRIS::PerPixel || mAdaptiveRISScheme == AdaptiveRIS::TileBased);
-        var["gDuplicationMap"] = mDuplicationMap->asBuffer();
-        var["gDuplicationMappingAlpha"] = mDuplicationMappingAlpha;
-
-        var["gSkipTemporalReuse"] = skipTemporalReuse;
-
         var["temporalVbuffer"] = mpTemporalVBuffer;
         var["motionVectors"] = renderData[kInputMotionVectors]->asTexture();
         var["gEnableTemporalReprojection"] = mEnableTemporalReprojection;

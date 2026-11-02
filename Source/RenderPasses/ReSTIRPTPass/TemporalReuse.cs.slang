@@ -36,30 +36,13 @@ struct PathReusePass
     Texture2D<float4> directLighting;                  
     bool useDirectLighting;
 
-    int gNumSpatialRounds;
+    int  gNumSpatialRounds;
 
     bool gIsLastRound;
     bool gEnableTemporalReprojection;
 
     float gTemporalHistoryLength;
     bool gNoResamplingForTemporalReuse;
-
-    // Adaptive ReSTIR
-    Buffer<uint> gRISPathIDs;
-    Buffer<uint> gPixelCandidateStatus;
-    RWBuffer<float> gDuplicationMap;
-
-    // uint gPatternShift;      // Amount of bits to shift right to access the right RIS candidate pattern for current frame
-    uint gGenerationPattern; // uint encoding for which pixels are RIS candidates within a 4x4 grid, contains patterns for two subsequent frames
-
-    bool gUsePathIDBuffers;
-
-    bool gAdaptiveTemporalReuse;
-    float gAdaptiveTemporalHistoryCap;
-    bool gEnableDuplicationMapping;
-    float gDuplicationMappingAlpha;
-
-    bool gSkipTemporalReuse;
 
     bool isValidPackedHitInfo(PackedHitInfo packed)
     {
@@ -99,22 +82,16 @@ struct PathReusePass
     * This method is optimized for small windows such that we can run the entire
     * algorithm in one pass.
     */
-    void ReSTIR(const uint2 pixel, const bool reproject)
+    void ReSTIR(const uint2 pixel)
     {
         var sg = TinyUniformSampleGenerator(pixel, (kCandidateSamples + 1 + gNumSpatialRounds) * params.seed + kCandidateSamples);
 
         // Compute offset into per-sample buffers. All samples are stored consecutively at this offset.
         const uint centralOffset = params.getReservoirOffset(pixel);
         PathReservoir dstReservoir = outputReservoirs[centralOffset];
-
-        if (reproject)
-        {
-            dstReservoir.init();
-        }
-
-        PathReservoir centralReservoir = dstReservoir; // TODO: Doesn't seem to be used
+        PathReservoir centralReservoir = dstReservoir;
         float currentM = dstReservoir.M;
-        float3 initialColor = dstReservoir.F * dstReservoir.weight; // TODO: Doesn't seem to be used
+        float3 initialColor = dstReservoir.F * dstReservoir.weight;
 
         if (ReSTIRMISKind(kTemporalReSTIRMISKind) == ReSTIRMISKind::Talbot)
         {
@@ -129,7 +106,7 @@ struct PathReusePass
         ShadingData centralPrimarySd = getPixelShadingData(pixel, centralPrimaryHitPacked);
         if (!isValidPackedHitInfo(centralPrimaryHitPacked)) return;
 
-        float3 color = float3(0.f);
+        float3 color = 0.f;
         ReconnectionData dummyRcData;
         dummyRcData.Init();
 
@@ -158,21 +135,11 @@ struct PathReusePass
             bool doTemporalUpdateForDynamicScene = kTemporalUpdateForDynamicScene;
 
             PathReservoir temporalReservoir = temporalReservoirs[params.getReservoirOffset(prevPixel)];
-            float duplicationScore = 0.0f;
-            if (gEnableDuplicationMapping && all(temporalPrimarySd.transmission == 0.0f))
-            {
-                duplicationScore = gDuplicationMap[pixel.x + pixel.y * params.frameDim.x];
-            }
-            float lerpFactor = pow(duplicationScore, gDuplicationMappingAlpha);
 
-            if (reproject)
-                temporalReservoir.M = min(lerp(gAdaptiveTemporalHistoryCap, 1.f, lerpFactor), temporalReservoir.M);
-            else
-                temporalReservoir.M = min(lerp(gTemporalHistoryLength, 1.f, lerpFactor) * currentM, temporalReservoir.M);
+            temporalReservoir.M = min(gTemporalHistoryLength * currentM, temporalReservoir.M);
 
             float dstJacobian;
 
-// #region Talbot RMIS
             ///////////////////
             /// TALBOT RMIS ///
             ///////////////////
@@ -257,8 +224,6 @@ struct PathReusePass
                     dstReservoir.finalizeGRIS();
                 }
             }
-
-// #region ConstantMIS
             /////////////////////
             /// CONSTANT RMIS ///
             /////////////////////
@@ -329,7 +294,6 @@ struct PathReusePass
 
                 dstReservoir.finalizeRIS();
             }
-// #endregion
 
             if (dstReservoir.weight < 0.f || isinf(dstReservoir.weight) || isnan(dstReservoir.weight)) dstReservoir.weight = 0.f;
             outputReservoirs[centralOffset] = dstReservoir;
@@ -343,7 +307,7 @@ struct PathReusePass
                     if (any(isnan(color) || isinf(color))) color = 0.f;
                 }
 
-                outputColor[pixel] = float4(color / kSamplesPerPixel, 1.f);
+                outputColor[pixel] += float4(color / kSamplesPerPixel, 1.f);
             }
         }
     }
@@ -353,24 +317,14 @@ struct PathReusePass
     */
     void execute(const uint2 _pixel)
     {
-        uint2 pixel = _pixel;
+        const uint2 pixel = _pixel;
 
-        if (any(pixel >= params.frameDim) || gSkipTemporalReuse) return;
+        if (any(pixel >= params.frameDim)) return;
 
         printSetPixel(pixel);
         logSetPixel(pixel);
 
-        if (!gUsePathIDBuffers)
-        {
-            uint mortonIdx = interleave_16bit(pixel) % 16;
-            uint patternMask = 1 << (15 - mortonIdx);
-            bool reprojectionPixel = (gGenerationPattern & patternMask) == 0;
-
-            ReSTIR(pixel, reprojectionPixel && gAdaptiveTemporalReuse);
-            return;
-        }
-
-        ReSTIR(pixel, gPixelCandidateStatus[pixel.x + (pixel.y * params.frameDim.x)] == 0);
+        ReSTIR(pixel);
     }
 };
 
@@ -379,8 +333,9 @@ cbuffer CB
     PathReusePass gPathReusePass;
 }
 
+
 [numthreads(16, 16, 1)]
-void main(uint3 dispatchThreadId: SV_DispatchThreadID)
+void main(uint3 dispatchThreadId : SV_DispatchThreadID)
 {
     gPathReusePass.execute(dispatchThreadId.xy);
 }

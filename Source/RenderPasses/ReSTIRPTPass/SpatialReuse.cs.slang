@@ -33,7 +33,7 @@ struct PathReusePass
     ByteAddressBuffer nRooksPattern;
 
     RWTexture2D<float4> outputColor;                      ///< Output resolved color.
-    RWStructuredBuffer<PathReservoir> outputReservoirs;     // reservoir from previous pass
+    StructuredBuffer<PathReservoir> outputReservoirs;     // reservoir from previous pass
     RWStructuredBuffer<PathReservoir> temporalReservoirs; // resulting reservoir for next frame
     StructuredBuffer<PixelReconnectionData> reconnectionDataBuffer;
     StructuredBuffer<PathReuseMISWeight> misWeightBuffer;
@@ -538,7 +538,6 @@ struct PathReusePass
             temporalReservoirs[centralOffset] = dstReservoir;
 
         if (any(isnan(color) || isinf(color) || color < 0.f)) color = 0.f;
-
         if (gIsLastRound)
         {
             if (useDirectLighting)
@@ -546,7 +545,8 @@ struct PathReusePass
                 color += directLighting[pixel].rgb;
                 if (any(isnan(color) || isinf(color))) color = 0.f;
             }
-            outputColor[pixel] = float4(color / kSamplesPerPixel, 1.f);
+
+            outputColor[pixel] += float4(color / kSamplesPerPixel, 1.f);
 
             // Output Denoiser Data (developed for NRD v2.12, doesn't guarantee to work with the latest version)
             if (kOutputNRDData && PathSamplingMode(kPathSamplingMode) == PathSamplingMode::ReSTIR)

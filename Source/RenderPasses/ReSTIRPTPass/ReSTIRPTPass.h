@@ -19,26 +19,6 @@
 
 using namespace Falcor;
 
-namespace Falcor
-{
-    enum class SamplingRateRIS
-    {
-        Full,
-        ThreeQuarter,
-        Half,
-        Quarter,
-        OneEigth,
-        OneSixteenth
-    };
-
-    enum class AdaptiveRIS
-    {
-        Naive,
-        PerPixel,
-        TileBased
-    };
-}
-
 /** Path tracer that uses TraceRayInline() in DXR 1.1.
 */
 class ReSTIRPTPass : public RenderPass
@@ -84,11 +64,8 @@ private:
     bool beginFrame(RenderContext* pRenderContext, const RenderData& renderData);
     void endFrame(RenderContext* pRenderContext, const RenderData& renderData);
     void generatePaths(RenderContext* pRenderContext, const RenderData& renderData, int sampleId = 0);
-    void generatePathsNaive(RenderContext* pRenderContext, const RenderData& renderData, int sampleId = 0);
-    void generatePathsPerPixel(RenderContext* pRenderContext, const RenderData& renderData, int sampleId = 0);
-    void generatePathsTileBased(RenderContext* pRenderContext, const RenderData& renderData, int sampleId = 0);
     void tracePass(RenderContext* pRenderContext, const RenderData& renderData, const ComputePass::SharedPtr& pass, const std::string& passName, int sampleId);
-    void PathReusePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool temporalReuse = false, int spatialRoundId = 0, bool isLastRound = false, bool skipTemporalReuse = false);
+    void PathReusePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool temporalReuse = false, int spatialRoundId = 0, bool isLastRound = false);
     void PathRetracePass(RenderContext* pRenderContext, uint32_t restir_i, const RenderData& renderData, bool temporalReuse = false, int spatialRoundId = 0);
     Texture::SharedPtr createNeighborOffsetTexture(uint32_t sampleCount);
 
@@ -191,7 +168,7 @@ private:
     uint64_t                        mAccumulatedShadowRayCount = 0;
 
     // params below
-    bool                            mEnableTemporalReuse = false;
+    bool                            mEnableTemporalReuse = true;
     bool                            mEnableSpatialReuse = true;
     SpatialReusePattern             mSpatialReusePattern = SpatialReusePattern::Default;
     PathReusePattern                mPathReusePattern = PathReusePattern::NRooksShift;
@@ -216,53 +193,6 @@ private:
 
     bool mResetRenderPassFlags = false;
 
-    // Adaptive RIS Path Generation
-    bool mEnableAdaptiveRIS = true;
-    AdaptiveRIS mAdaptiveRISScheme = AdaptiveRIS::TileBased;
-
-    // Naive
-    uint mSamplingRateRIS = 0;
-    uint mPatterns[6][8] = { //4x4 grid generation patterns, each uint encodes generation patterns for two subsequent frames
-        {0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU}, // Full
-        {0x7777BBBBU, 0xDDDDEEEEU, 0x7777BBBBU, 0xDDDDEEEEU, 0x7777BBBBU, 0xDDDDEEEEU, 0x7777BBBBU, 0xDDDDEEEEU}, // 3/4
-        {0x99996666U, 0x99996666U, 0x99996666U, 0x99996666U, 0x99996666U, 0x99996666U, 0x99996666U, 0x99996666U}, // 1/2
-        {0x88884444U, 0x22221111U, 0x88884444U, 0x22221111U, 0x88884444U, 0x22221111U, 0x88884444U, 0x22221111U}, // 1/4
-        {0x80084004U, 0x20021001U, 0x08800440U, 0x02200110U, 0x80084004U, 0x20021001U, 0x08800440U, 0x02200110U}, // 1/8
-        {0x80004000U, 0x20001000U, 0x08000400U, 0x02000100U, 0x00800040U, 0x00200010U, 0x00080004U, 0x00020001U}  // 1/16
-    };
-
-    // Per Pixel
-    float mAdaptiveMinPerPixelRISRate = 0.167f;
-    float mAdaptiveMaxPerPixelRISRate = 1.0f;
-    float mMinMotionDistancePerPixel = 1.0f;
-    float mMaxMotionDistancePerPixel = 10.0f;
-    float mMaxMotionSamplingChancePerPixel = 0.333f;
-    std::vector<uint> mNonRISFrameCountersData = std::vector<uint>(3840 * 2160, 0u);
-    Buffer::SharedPtr mNonRISFrameCounters = Buffer::create(mNonRISFrameCountersData.size() * sizeof(uint), ResourceBindFlags::UnorderedAccess, Buffer::CpuAccess::Read, mNonRISFrameCountersData.data());
-
-    // Tile-Based
-    uint mAdaptiveRISTileBasedMinRate = 4;
-    float mMinMotionDistanceTileBased = 1.0f;
-    float mMaxMotionDistanceTileBased = 10.0f;
-    float mMaxMotionSamplingChanceTileBased = 0.25f;
-
-    // Buffers
-    std::vector<uint> mRISPathIDsData = std::vector<uint>(3840 * 2160, 0u);
-    std::vector<uint> mPixelCandidateStatusData = std::vector<uint>(3840 * 2160, 0u);
-    Buffer::SharedPtr mRISPathIDs = Buffer::create(mRISPathIDsData.size() * sizeof(uint), ResourceBindFlags::UnorderedAccess, Buffer::CpuAccess::Read, mRISPathIDsData.data());
-    Buffer::SharedPtr mPixelCandidateStatus = Buffer::create(mPixelCandidateStatusData.size() * sizeof(uint), ResourceBindFlags::UnorderedAccess, Buffer::CpuAccess::Read, mPixelCandidateStatusData.data());
-
-    // Adaptive Temporal Reuse
-    bool mEnableAdaptiveTemporalReuse = true;
-    bool mValidAdaptiveHistory = false;
-    float mAdaptiveTemporalHistoryCap = 20.0f;
-
-    // Adaptive Duplication Mapping
-    bool mEnableDuplicationMapping = true;
-    float mDuplicationMappingAlpha = 0.1f;
-    std::vector<float> mDuplicationMapData = std::vector<float>(3840 * 2160, 0.0f);
-    Buffer::SharedPtr mDuplicationMap = Buffer::create(mDuplicationMapData.size() * sizeof(float), ResourceBindFlags::UnorderedAccess, Buffer::CpuAccess::Read, mDuplicationMapData.data());
-
     ComputePass::SharedPtr          mpSpatialReusePass;      ///< Merges reservoirs.
     ComputePass::SharedPtr          mpTemporalReusePass;      ///< Merges reservoirs.
     ComputePass::SharedPtr          mpComputePathReuseMISWeightsPass;
@@ -271,9 +201,6 @@ private:
     ComputePass::SharedPtr          mpTemporalPathRetracePass;
 
     ComputePass::SharedPtr          mpGeneratePaths;                ///< Fullscreen compute pass generating paths starting at primary hits.
-    ComputePass::SharedPtr          mpGeneratePathsNaive;           ///< Fullscreen compute pass generating paths starting at primary hits.
-    ComputePass::SharedPtr          mpGeneratePathsPerPixel;        ///< Fullscreen compute pass generating paths starting at primary hits.
-    ComputePass::SharedPtr          mpGeneratePathsTileBased;        ///< Fullscreen compute pass generating paths starting at primary hits.
     ComputePass::SharedPtr          mpTracePass;                    ///< Main tracing pass.
 
     ComputePass::SharedPtr          mpReflectTypes;             ///< Helper for reflecting structured buffer types.
