@@ -58,7 +58,6 @@ def ExportErrorMetrics():
                 continue
 
             print(f"comparing images in {runPath}\t", end="\r")
-            runLogDict[scene][run] = path.getmtime(runPath)
 
             runFrames = [path.join(runPath, image) for image in os.listdir(runPath) if image.split(".")[-1] == "png"]
             runFrames = sorted(runFrames)
@@ -110,10 +109,11 @@ def ExportErrorMetrics():
             with open(path.join(runPath, "errors.json"), "w+") as file:
                 file.write(json.dumps(exportDict))
 
-            print(f"exported frame error data to {path.join(runPath, "errors.json")}\t")
+            runLogDict[scene][run] = path.getmtime(runPath)
+            with open(runLogDictPath, "w+") as file:
+                file.write(json.dumps(runLogDict))
 
-    with open(runLogDictPath, "w+") as file:
-        file.write(json.dumps(runLogDict))
+            print(f"exported frame error data to {path.join(runPath, "errors.json")}\t")
 
     print("Finished exporting frame error data\t\n")
 
