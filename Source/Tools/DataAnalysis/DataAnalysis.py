@@ -712,6 +712,7 @@ def CreateComparisonFigures():
 
             figureName = f"{scene}_{comparison}_Top.pdf"
             plt.savefig(path.join(exportFolder, figureName), bbox_inches="tight", dpi="figure", pad_inches=0, format="pdf")
+            print(f"Generated {figureName}")
 
             comparisonCount = len(comparisonsDict[scene][comparison].items())
             figHeight = 347 * comparisonCount

@@ -994,11 +994,17 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
                 case AdaptiveRIS::PerPixel:
                     dirty |= widget.var("Min Chance", mAdaptiveMinPerPixelRISRate);
                     dirty |= widget.var("Max Chance", mAdaptiveMaxPerPixelRISRate);
+                    dirty |= widget.var("Min Motion Distance", mMinMotionDistancePerPixel);
+                    dirty |= widget.var("Max Motion Distance", mMaxMotionDistancePerPixel);
+                    dirty |= widget.var("Max Motion Sampling Chance", mMaxMotionSamplingChancePerPixel);
                     dirty |= widget.checkbox("Duplication Mapping", mEnableDuplicationMapping);
                     dirty |= widget.var("Duplication Mapping Alpha", mDuplicationMappingAlpha);
                     break;
                 case AdaptiveRIS::TileBased:
                     dirty |= widget.dropdown("Min Tile RIS Rate", kSamplingRateRIS, reinterpret_cast<uint32_t&>(mAdaptiveRISTileBasedMinRate));
+                    dirty |= widget.var("Min Motion Distance", mMinMotionDistanceTileBased);
+                    dirty |= widget.var("Max Motion Distance", mMaxMotionDistanceTileBased);
+                    dirty |= widget.var("Max Motion Sampling Chance", mMaxMotionSamplingChanceTileBased);
                     dirty |= widget.checkbox("Duplication Mapping", mEnableDuplicationMapping);
                     dirty |= widget.var("Duplication Mapping Alpha", mDuplicationMappingAlpha);
                     break;
@@ -1796,6 +1802,10 @@ void ReSTIRPTPass::generatePathsPerPixel(RenderContext* pRenderContext, const Re
     var["gAdaptiveMaxPerPixelRISRate"] = mAdaptiveMaxPerPixelRISRate;
     var["gNonRISFrameCounters"] = mNonRISFrameCounters;
 
+    var["gMinMotionDistance"] = mMinMotionDistancePerPixel;
+    var["gMaxMotionDistance"] = mMaxMotionDistancePerPixel;
+    var["gMaxMotionSamplingChance"] = mMaxMotionSamplingChancePerPixel;
+
     var["gDuplicationMap"] = mDuplicationMap->asBuffer();
     var["gEnableDuplicationMapping"] = mEnableDuplicationMapping;
 
@@ -1837,6 +1847,10 @@ void ReSTIRPTPass::generatePathsTileBased(RenderContext* pRenderContext, const R
     var["gEnableTemporalReprojection"] = mEnableTemporalReprojection;
 
     var["gAdaptiveTemporalHistoryCap"] = mAdaptiveTemporalHistoryCap;
+
+    var["gMinMotionDistance"] = mMinMotionDistanceTileBased;
+    var["gMaxMotionDistance"] = mMaxMotionDistanceTileBased;
+    var["gMaxMotionSamplingChance"] = mMaxMotionSamplingChanceTileBased;
 
     var["gDuplicationMap"] = mDuplicationMap->asBuffer();
     var["gEnableDuplicationMapping"] = mEnableDuplicationMapping;

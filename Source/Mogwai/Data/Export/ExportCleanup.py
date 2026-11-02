@@ -4,7 +4,7 @@ import ExportConfig as cfg
 
 
 def cleanFolder(folderPath):
-    print(f"Cleaning up .exr files from {folderPath}", end="\r")
+    print(f"Cleaning up .exr files from {folderPath}\t\t\t\t", end="\r")
     
     subFolders = [subFolder for subFolder in os.listdir(folderPath) if path.isdir(path.join(folderPath, subFolder))]
     files = [file for file in os.listdir(folderPath) if path.isfile(path.join(folderPath, file))]
@@ -21,11 +21,11 @@ def cleanFolder(folderPath):
 
 def main():
     capturesFolder = path.join(cfg.baseDirectory, "Captures")
-    print(f"Cleaning up .exr files from {capturesFolder} and its subfolders")
+    print(f"Cleaning up .exr files from {capturesFolder} and its subfolders\t\t\t\t")
 
     cleanFolder(capturesFolder)
 
-    print(f"Finished cleaning up .exr files from {capturesFolder} and its subfolders\t\n")
+    print(f"Finished cleaning up .exr files from {capturesFolder} and its subfolders\t\t\t\t\n")
 
 
 if __name__ == "__main__":

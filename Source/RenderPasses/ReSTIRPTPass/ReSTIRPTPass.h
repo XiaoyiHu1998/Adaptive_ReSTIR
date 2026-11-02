@@ -221,7 +221,7 @@ private:
     AdaptiveRIS mAdaptiveRISScheme = AdaptiveRIS::TileBased;
 
     // Naive
-    uint mSamplingRateRIS = 3;
+    uint mSamplingRateRIS = 0;
     uint mPatterns[6][8] = { //4x4 grid generation patterns, each uint encodes generation patterns for two subsequent frames
         {0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU, 0xFFFFFFFFU}, // Full
         {0x7777BBBBU, 0xDDDDEEEEU, 0x7777BBBBU, 0xDDDDEEEEU, 0x7777BBBBU, 0xDDDDEEEEU, 0x7777BBBBU, 0xDDDDEEEEU}, // 3/4
@@ -232,13 +232,19 @@ private:
     };
 
     // Per Pixel
-    float mAdaptiveMinPerPixelRISRate = 0.025f;
+    float mAdaptiveMinPerPixelRISRate = 0.167f;
     float mAdaptiveMaxPerPixelRISRate = 1.0f;
+    float mMinMotionDistancePerPixel = 1.0f;
+    float mMaxMotionDistancePerPixel = 10.0f;
+    float mMaxMotionSamplingChancePerPixel = 0.333f;
     std::vector<uint> mNonRISFrameCountersData = std::vector<uint>(3840 * 2160, 0u);
     Buffer::SharedPtr mNonRISFrameCounters = Buffer::create(mNonRISFrameCountersData.size() * sizeof(uint), ResourceBindFlags::UnorderedAccess, Buffer::CpuAccess::Read, mNonRISFrameCountersData.data());
 
     // Tile-Based
     uint mAdaptiveRISTileBasedMinRate = 4;
+    float mMinMotionDistanceTileBased = 1.0f;
+    float mMaxMotionDistanceTileBased = 10.0f;
+    float mMaxMotionSamplingChanceTileBased = 0.25f;
 
     // Buffers
     std::vector<uint> mRISPathIDsData = std::vector<uint>(3840 * 2160, 0u);

@@ -73,6 +73,10 @@ struct PathGenerator
     uint gPatternHalf;
     uint gPatternThreeQuarters;
 
+    float gMinMotionDistance;
+    float gMaxMotionDistance;
+    float gMaxMotionSamplingChance;
+
     // Render settings that depend on the scene.
     // TODO: Move into scene defines.
     // static bool kUseEnvBackground = USE_ENV_BACKGROUND;
@@ -111,9 +115,14 @@ struct PathGenerator
         return sd;
     }
 
-    float easingFunction(float x)
+    float easingFunctionConfidenceWeights(float x)
     {
         return x * x * x * x * x;
+    }
+
+    float easingFunctionMotionVector(float x)
+    {
+        return x;
     }
 
     uint determineGenerationPattern(float targetCandidateCount)
@@ -179,9 +188,9 @@ struct PathGenerator
             bool incorrectReprojection = false;
             bool transmissiveMaterial = false;
             bool specularMaterial = false;
+            float2 motionVector = motionVectors[pixel];
             var sg = TinyUniformSampleGenerator(pixel, (kCandidateSamples + 1 + 1) * params.seed + kCandidateSamples);
             { 
-                float2 motionVector = motionVectors[pixel];
                 int2 prevPixel = pixel;
 
                 bool foundTemporalSurface = true;
@@ -229,8 +238,14 @@ struct PathGenerator
             }
             gDuplicationMap[pixel.x + pixel.y * params.frameDim.x] = duplicationScore;
 
+            float motionSamplingChance = 0.0f;
+            float motionDistance = abs(length(motionVector * float2(params.frameDim)));
+            if (motionDistance > gMinMotionDistance)
+                motionSamplingChance = easingFunctionMotionVector(min(1.0f, motionDistance / (gMaxMotionDistance - gMinMotionDistance))) * gMaxMotionSamplingChance;
+
             // Calculate chance of generating new samples [0,inf)
-            float candidateChance = 1.f - easingFunction(min(gAdaptiveTemporalHistoryCap, temporalReservoir.M) / gAdaptiveTemporalHistoryCap);
+            float candidateChance = 1.f - easingFunctionConfidenceWeights(min(gAdaptiveTemporalHistoryCap, temporalReservoir.M) / gAdaptiveTemporalHistoryCap);
+            candidateChance += motionSamplingChance;
             // if (specularMaterial) { candidateChance = max(1.0f, candidateChance); }
             if (transmissiveMaterial) { candidateChance = max(1.0f, candidateChance); }
             if (!validTemporalReservoir || disoccluded || incorrectReprojection) { candidateChance = 1.0f; }

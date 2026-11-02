@@ -52,12 +52,20 @@ def captureAnimationFrames(startFrame: int, frameCount: int, m):
 
     sceneDirectory = f"{baseDirectory}/Captures/{sceneName}"
     runDirectory = f"{baseDirectory}/Captures/{sceneName}/{runName}"
+    flipDirectory = f"{runDirectory}/Flip"
 
     if not path.exists(sceneDirectory):
         os.mkdir(sceneDirectory)
 
     if not path.exists(runDirectory):
         os.mkdir(runDirectory)
+
+    if path.exists(flipDirectory):
+        flipImages = os.listdir(flipDirectory)
+        for flipImage in flipImages:
+            os.remove(path.join(flipDirectory, flipImage))
+            
+        os.rmdir(flipDirectory)
         
     files = [file for file in os.listdir(runDirectory) if path.isfile(path.join(runDirectory, file))]
     if len(files) > 0:
