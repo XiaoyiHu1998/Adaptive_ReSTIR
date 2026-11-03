@@ -996,6 +996,7 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
                     dirty |= widget.var("Max Chance", mAdaptiveMaxPerPixelRISRate);
                     dirty |= widget.var("Min Motion Distance", mMinMotionDistancePerPixel);
                     dirty |= widget.var("Max Motion Distance", mMaxMotionDistancePerPixel);
+                    dirty |= widget.var("Min Motion Sampling Chance", mMinMotionSamplingChancePerPixel);
                     dirty |= widget.var("Max Motion Sampling Chance", mMaxMotionSamplingChancePerPixel);
                     dirty |= widget.checkbox("Duplication Mapping", mEnableDuplicationMapping);
                     dirty |= widget.var("Duplication Mapping Alpha", mDuplicationMappingAlpha);
@@ -1004,6 +1005,7 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
                     dirty |= widget.dropdown("Min Tile RIS Rate", kSamplingRateRIS, reinterpret_cast<uint32_t&>(mAdaptiveRISTileBasedMinRate));
                     dirty |= widget.var("Min Motion Distance", mMinMotionDistanceTileBased);
                     dirty |= widget.var("Max Motion Distance", mMaxMotionDistanceTileBased);
+                    dirty |= widget.var("Min Motion Sampling Chance", mMinMotionSamplingChanceTileBased);
                     dirty |= widget.var("Max Motion Sampling Chance", mMaxMotionSamplingChanceTileBased);
                     dirty |= widget.checkbox("Duplication Mapping", mEnableDuplicationMapping);
                     dirty |= widget.var("Duplication Mapping Alpha", mDuplicationMappingAlpha);
@@ -1804,6 +1806,7 @@ void ReSTIRPTPass::generatePathsPerPixel(RenderContext* pRenderContext, const Re
 
     var["gMinMotionDistance"] = mMinMotionDistancePerPixel;
     var["gMaxMotionDistance"] = mMaxMotionDistancePerPixel;
+    var["gMinMotionSamplingChance"] = mMinMotionSamplingChancePerPixel;
     var["gMaxMotionSamplingChance"] = mMaxMotionSamplingChancePerPixel;
 
     var["gDuplicationMap"] = mDuplicationMap->asBuffer();
@@ -1850,6 +1853,7 @@ void ReSTIRPTPass::generatePathsTileBased(RenderContext* pRenderContext, const R
 
     var["gMinMotionDistance"] = mMinMotionDistanceTileBased;
     var["gMaxMotionDistance"] = mMaxMotionDistanceTileBased;
+    var["gMinMotionSamplingChance"] = mMinMotionSamplingChanceTileBased;
     var["gMaxMotionSamplingChance"] = mMaxMotionSamplingChanceTileBased;
 
     var["gDuplicationMap"] = mDuplicationMap->asBuffer();

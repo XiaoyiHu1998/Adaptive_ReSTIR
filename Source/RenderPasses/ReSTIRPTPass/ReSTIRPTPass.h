@@ -218,7 +218,7 @@ private:
 
     // Adaptive RIS Path Generation
     bool mEnableAdaptiveRIS = true;
-    AdaptiveRIS mAdaptiveRISScheme = AdaptiveRIS::TileBased;
+    AdaptiveRIS mAdaptiveRISScheme = AdaptiveRIS::PerPixel;
 
     // Naive
     uint mSamplingRateRIS = 0;
@@ -232,11 +232,12 @@ private:
     };
 
     // Per Pixel
-    float mAdaptiveMinPerPixelRISRate = 0.167f;
+    float mAdaptiveMinPerPixelRISRate = 0.125f;
     float mAdaptiveMaxPerPixelRISRate = 1.0f;
     float mMinMotionDistancePerPixel = 1.0f;
     float mMaxMotionDistancePerPixel = 10.0f;
-    float mMaxMotionSamplingChancePerPixel = 0.333f;
+    float mMinMotionSamplingChancePerPixel = 0.25f;
+    float mMaxMotionSamplingChancePerPixel = 0.5f;
     std::vector<uint> mNonRISFrameCountersData = std::vector<uint>(3840 * 2160, 0u);
     Buffer::SharedPtr mNonRISFrameCounters = Buffer::create(mNonRISFrameCountersData.size() * sizeof(uint), ResourceBindFlags::UnorderedAccess, Buffer::CpuAccess::Read, mNonRISFrameCountersData.data());
 
@@ -244,7 +245,8 @@ private:
     uint mAdaptiveRISTileBasedMinRate = 4;
     float mMinMotionDistanceTileBased = 1.0f;
     float mMaxMotionDistanceTileBased = 10.0f;
-    float mMaxMotionSamplingChanceTileBased = 0.25f;
+    float mMinMotionSamplingChanceTileBased = 0.1f;
+    float mMaxMotionSamplingChanceTileBased = 0.2f;
 
     // Buffers
     std::vector<uint> mRISPathIDsData = std::vector<uint>(3840 * 2160, 0u);

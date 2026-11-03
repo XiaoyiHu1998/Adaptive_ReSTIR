@@ -75,6 +75,7 @@ struct PathGenerator
 
     float gMinMotionDistance;
     float gMaxMotionDistance;
+    float gMinMotionSamplingChance;
     float gMaxMotionSamplingChance;
 
     // Render settings that depend on the scene.
@@ -124,7 +125,7 @@ struct PathGenerator
     {
         return x;
     }
-
+    
     uint determineGenerationPattern(float targetCandidateCount)
     {
         if (targetCandidateCount <= 256.f * 0.09375f && gMinRate >= 5)
@@ -240,13 +241,13 @@ struct PathGenerator
 
             float motionSamplingChance = 0.0f;
             float motionDistance = abs(length(motionVector * float2(params.frameDim)));
-            if (motionDistance > gMinMotionDistance)
-                motionSamplingChance = easingFunctionMotionVector(min(1.0f, motionDistance / (gMaxMotionDistance - gMinMotionDistance))) * gMaxMotionSamplingChance;
+            if (motionDistance >= gMinMotionDistance)
+                motionSamplingChance = gMinMotionSamplingChance + easingFunctionMotionVector(min(1.0f, motionDistance / (gMaxMotionDistance - gMinMotionDistance))) * gMaxMotionSamplingChance;
 
             // Calculate chance of generating new samples [0,inf)
             float candidateChance = 1.f - easingFunctionConfidenceWeights(min(gAdaptiveTemporalHistoryCap, temporalReservoir.M) / gAdaptiveTemporalHistoryCap);
             candidateChance += motionSamplingChance;
-            // if (specularMaterial) { candidateChance = max(1.0f, candidateChance); }
+            if (specularMaterial) { candidateChance = max(0.5f, candidateChance); }
             if (transmissiveMaterial) { candidateChance = max(1.0f, candidateChance); }
             if (!validTemporalReservoir || disoccluded || incorrectReprojection) { candidateChance = 1.0f; }
             candidateChance += duplicationScore;

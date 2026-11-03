@@ -91,7 +91,7 @@ def ExportErrorMetrics():
                 mapeCalls.append(mapeCall)
                 flipCalls.append(flipCall)
 
-            with ThreadPoolExecutor(max_workers=16) as executor:
+            with ThreadPoolExecutor(max_workers=8) as executor:
                 errorsMAE = list(executor.map(ExecuteImageCompareCall, maeCalls))
                 errorsMSE = list(executor.map(ExecuteImageCompareCall, mseCalls))
                 errorsRMSE = list(executor.map(ExecuteImageCompareCall, rmseCalls))
@@ -256,6 +256,8 @@ def ExportAverageProfilerData():
             dictList = dataDict[scene][restirScheme]
             dictCount = len(dictList)
             minFrameCount = sys.maxsize
+            
+            isReSTIRPT = restirScheme == "ReSTIR PT"
 
             for profilerDict in dictList:
                 minFrameCount = min(minFrameCount, profilerDict["frameCount"])
@@ -280,7 +282,8 @@ def ExportAverageProfilerData():
     
                 for profilerDict in dictList:
                     averageReSTIRPTPassValue += (1.0 / float(dictCount)) * profilerDict["events"][ReSTIRPTPass]["records"][frame]
-                    averageGeneratePathsValue += (1.0 / float(dictCount)) * profilerDict["events"][generatePathsScheme]["records"][frame]
+                    if not isReSTIRPT:
+                        averageGeneratePathsValue += (1.0 / float(dictCount)) * profilerDict["events"][generatePathsScheme]["records"][frame]
                     averageTracePassValue += (1.0 / float(dictCount)) * profilerDict["events"][tracePass]["records"][frame]
                     averageSpatialPathRetraceValue += (1.0 / float(dictCount)) * profilerDict["events"][spatialPathRetrace]["records"][frame]
                     averageSpatialReuseValue += (1.0 / float(dictCount)) * profilerDict["events"][spatialReuse]["records"][frame]
@@ -445,7 +448,7 @@ def ExportGraphs():
         # Frametime graph main schemes
         fig, ax = plt.subplots()
         for restirScheme in restirSchemes:
-            includedSchemes = ["TileBased", "PerPixel", "Naive - Full", "Naive - Quarter", "Naive - OneEighth", "Naive - OneSixteenth"]
+            includedSchemes = ["TileBased", "PerPixel", "Naive - Full", "Naive - ThreeQuarters", "Naive - Half", "Naive - Quarter", "Naive - OneEighth", "Naive - OneSixteenth"]
 
             if restirScheme in includedSchemes:
                 if restirScheme !="Naive - OneSixteenth":
@@ -476,7 +479,7 @@ def ExportGraphs():
         for errorMetric in errorMetrics:
             fig, ax = plt.subplots()
 
-            excludedSchemes = ["TileBased", "PerPixel", "PerPixel - RISGuarantee"]
+            excludedSchemes = ["TileBased", "PerPixel", "PerPixel - RISGuarantee", "ReSTIR PT"]
 
             upperBoundX = sys.maxsize
             for restirScheme in restirSchemes:
@@ -510,7 +513,7 @@ def ExportGraphs():
         for errorMetric in errorMetrics:
             fig, ax = plt.subplots()
 
-            includedSchemes = ["TileBased", "PerPixel", "Naive - Full", "Naive - Quarter", "Naive - OneEighth"]
+            includedSchemes = ["TileBased", "PerPixel", "Naive - Full", "Naive - ThreeQuarters", "Naive - Half", "Naive - Quarter", "Naive - OneEighth", "Naive - OneSixteenth"]
 
             upperBoundX = sys.maxsize
             for restirScheme in restirSchemes:
@@ -765,11 +768,11 @@ def CreateComparisonFigures():
     
 
 def main():
-    ExportErrorMetrics()
-    ExportAverageErrorMetrics()
-    ExportAverageProfilerData()
+    # ExportErrorMetrics()
+    # ExportAverageErrorMetrics()
+    # ExportAverageProfilerData()
     ExportGraphs()
-    ExportTableData()
+    # ExportTableData()
     GatherComparisonData()
     CreateComparisonFigures()
 

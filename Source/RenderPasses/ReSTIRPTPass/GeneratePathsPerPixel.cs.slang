@@ -66,6 +66,7 @@ struct PathGenerator
     float gAdaptiveMaxPerPixelRISRate;
     float gMinMotionDistance;
     float gMaxMotionDistance;
+    float gMinMotionSamplingChance;
     float gMaxMotionSamplingChance;
     bool gEnableDuplicationMapping;
 
@@ -214,8 +215,8 @@ struct PathGenerator
 
             float motionSamplingChance = 0.0f;
             float motionDistance = abs(length(motionVector * float2(params.frameDim)));
-            if (motionDistance > gMinMotionDistance)
-                motionSamplingChance = easingFunctionMotionVector(min(1.0f, motionDistance / (gMaxMotionDistance - gMinMotionDistance))) * gMaxMotionSamplingChance;
+            if (motionDistance >= gMinMotionDistance)
+                motionSamplingChance = gMinMotionSamplingChance + easingFunctionMotionVector(min(1.0f, motionDistance / (gMaxMotionDistance - gMinMotionDistance))) * gMaxMotionSamplingChance;
 
             // Calculate chance of generating new samples [0,inf)
             float candidateChance = 1.f - easingFunctionConfidenceWeight(min(gAdaptiveTemporalHistoryCap, temporalReservoir.M) / gAdaptiveTemporalHistoryCap);

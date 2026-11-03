@@ -1,6 +1,7 @@
 # Renderer
-# activeReSTIRScheme = "PerPixel"
-activeReSTIRScheme = "TileBased"
+# activeReSTIRScheme = "ReSTIR PT"
+activeReSTIRScheme = "PerPixel"
+# activeReSTIRScheme = "TileBased"
 # activeReSTIRScheme = "Naive - Full"
 # activeReSTIRScheme = "Naive - ThreeQuarters"
 # activeReSTIRScheme = "Naive - Half"
