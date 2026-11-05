@@ -206,12 +206,16 @@ struct PathGenerator
             reservoirRandomSeeds[threadIdx % 256] = temporalReservoir.rcRandomSeed;
             GroupMemoryBarrierWithGroupSync();
 
-            float duplicationScore = -1.f / 255.f;
-            for (int i = 0; i < 256; i++)
+            float duplicationScore;
+            if (gEnableDuplicationMapping)
             {
-                if (temporalReservoir.rcRandomSeed == reservoirRandomSeeds[i]) { duplicationScore += 1.f / 255.f; }
+                duplicationScore = -1.f / 255.f;
+                for (int i = 0; i < 256; i++)
+                {
+                    if (temporalReservoir.rcRandomSeed == reservoirRandomSeeds[i]) { duplicationScore += 1.f / 255.f; }
+                }
+                gDuplicationMap[pixel.x + pixel.y * params.frameDim.x] = duplicationScore;
             }
-            gDuplicationMap[pixel.x + pixel.y * params.frameDim.x] = duplicationScore;
 
             float motionSamplingChance = 0.0f;
             float motionDistance = abs(length(motionVector * float2(params.frameDim)));
@@ -224,7 +228,7 @@ struct PathGenerator
             if (specularMaterial) { candidateChance = max(0.5f, candidateChance); }
             if (transmissiveMaterial) { candidateChance = max(1.0f, candidateChance); }
             if (!validTemporalReservoir || disoccluded || incorrectReprojection /*|| tooLongWithoutRISCandidate*/) { candidateChance = 1.0f; }
-            candidateChance += duplicationScore;
+            if (gEnableDuplicationMapping) { candidateChance += duplicationScore;}
             candidateChance = min(gAdaptiveMaxPerPixelRISRate, max(gAdaptiveMinPerPixelRISRate, candidateChance));
 
             // candidateChance / 1.0f gives the amount of guaranteed new samples and candidateChance % 1.0f gives chance of an additional sample
