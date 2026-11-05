@@ -91,7 +91,7 @@ def ExportErrorMetrics():
                 mapeCalls.append(mapeCall)
                 flipCalls.append(flipCall)
 
-            with ThreadPoolExecutor(max_workers=8) as executor:
+            with ThreadPoolExecutor(max_workers=16) as executor:
                 errorsMAE = list(executor.map(ExecuteImageCompareCall, maeCalls))
                 errorsMSE = list(executor.map(ExecuteImageCompareCall, mseCalls))
                 errorsRMSE = list(executor.map(ExecuteImageCompareCall, rmseCalls))
@@ -412,9 +412,12 @@ def ExportGraphs():
     if not path.exists(figuresPath):
         os.makedirs(figuresPath)
 
+    schemeOrder = {"ReSTIR PT": 11, "Naive - Full": 1, "Naive - ThreeQuarters": 2, "Naive - Half": 3, "Naive - Quarter": 4, "Naive - OneEighth": 5, "Naive - OneSixteenth": 6, "PerPixel": 7, "TileBased": 8, "PerPixel - RISGuarantee": 9, "PerPixel - No Duplication Mapping": 10}
+
     print("Generating graphs")
     for scene in graphsDict.keys():
         restirSchemes = sorted(graphsDict[scene].keys())
+        restirSchemes.sort(key=lambda scheme : schemeOrder[scheme])
         animatedScene = "Animated" in scene
 
         # Frametime graph naive schemes
@@ -429,12 +432,6 @@ def ExportGraphs():
                 if restirScheme == "Naive - OneSixteenth":
                     cumulativeFrameTimes, frametimesReSTIROverhead = graphsDict[scene][restirScheme]["frametimesReSTIROverhead"]
                     line, = ax.plot(cumulativeFrameTimes, frametimesReSTIROverhead, label="Naive - 1/16 No Rays")
-                    line.set_dashes([4, 4])
-                    line.set_dash_capstyle("round")
-
-                # if "Naive" in restirScheme and not "Full" in restirScheme:
-                #     line.set_dashes([4, 4])
-                #     line.set_dash_capstyle("round")
 
         ax.set(xlabel="time (ms)", ylabel="frametime (ms)", title=f"Naive scheme frametimes ({scene})")
         ax.set_xbound(lower=0, upper=3000)
@@ -448,20 +445,22 @@ def ExportGraphs():
         # Frametime graph main schemes
         fig, ax = plt.subplots()
         for restirScheme in restirSchemes:
-            includedSchemes = ["TileBased", "PerPixel", "Naive - Full", "Naive - ThreeQuarters", "Naive - Half", "Naive - Quarter", "Naive - OneEighth", "Naive - OneSixteenth"]
+            includedSchemes = ["TileBased", "PerPixel", "PerPixel - No Duplication Mapping", "Naive - Full", "Naive - Half", "Naive - Quarter", "Naive - OneEighth", "Naive - OneSixteenth"]
 
             if restirScheme in includedSchemes:
                 if restirScheme !="Naive - OneSixteenth":
                     cumulativeFrameTimes, frametimes = graphsDict[scene][restirScheme]["frametimes"]
                     line, = ax.plot(cumulativeFrameTimes, frametimes, label=naiveSchemeToGraphLabel(restirScheme))
 
+                if "Naive" in restirScheme and not "Full" in restirScheme:
+                    line.set_linestyle("dotted")
+
                 if restirScheme == "Naive - OneSixteenth":
                     cumulativeFrameTimes, frametimesReSTIROverhead = graphsDict[scene][restirScheme]["frametimesReSTIROverhead"]
                     line, = ax.plot(cumulativeFrameTimes, frametimesReSTIROverhead, label="Naive - 1/16 No Rays")
-                    line.set_dashes([4, 4])
-                    line.set_dash_capstyle("round")
+                    line.set_linestyle("dotted")
 
-                if "Naive" in restirScheme and not "Full" in restirScheme:
+                if "PerPixel - No Duplication Mapping" == restirScheme:
                     line.set_dashes([4, 4])
                     line.set_dash_capstyle("round")
 
@@ -474,12 +473,12 @@ def ExportGraphs():
         fig.savefig(path.join(figuresPath, figureName), bbox_inches="tight", format="pdf")
         print(f"Exported {figureName}")
 
-        # Error Metrics Naive Scheme
+        # Error Metrics Over Time Naive Scheme
         errorMetrics = ["MAE", "MSE", "RMSE", "MAPE", "Mean FLIP"]
         for errorMetric in errorMetrics:
             fig, ax = plt.subplots()
 
-            excludedSchemes = ["TileBased", "PerPixel", "PerPixel - RISGuarantee", "ReSTIR PT"]
+            excludedSchemes = ["TileBased", "PerPixel", "PerPixel - RISGuarantee" , "PerPixel - No Duplication Mapping"]
 
             upperBoundX = sys.maxsize
             for restirScheme in restirSchemes:
@@ -496,9 +495,13 @@ def ExportGraphs():
 
                     upperBoundX = min(upperBoundX, xValues[-1])
                     line, = ax.semilogy(xValues, errorValue, label=naiveSchemeToGraphLabel(restirScheme))
+                    
+                    if restirScheme == "ReSTIR PT":
+                        line.set_dashes([4, 4])
+                        line.set_dash_capstyle("round")
 
             xLabel = "Frame" if animatedScene else "time (ms)"
-            ax.set(xlabel=xLabel, ylabel=f"{errorMetric}", title=f"Naive schemes {errorMetric} ({scene})")
+            ax.set(xlabel=xLabel, ylabel=f"{errorMetric}", title=f"Naive schemes {errorMetric} Over Time ({scene})")
             ax.set_xbound(lower=0, upper=upperBoundX)
             ax.set_ybound(lower=0)
             ax.grid()
@@ -508,12 +511,12 @@ def ExportGraphs():
             fig.savefig(path.join(figuresPath, figureName), bbox_inches="tight", format="pdf")
             print(f"Exported {figureName}")
 
-        # Error Metrics Main Schemes
+        # Error Metrics Over Time Main Schemes
         errorMetrics = ["MAE", "MSE", "RMSE", "MAPE", "Mean FLIP"]
         for errorMetric in errorMetrics:
             fig, ax = plt.subplots()
 
-            includedSchemes = ["TileBased", "PerPixel", "Naive - Full", "Naive - ThreeQuarters", "Naive - Half", "Naive - Quarter", "Naive - OneEighth", "Naive - OneSixteenth"]
+            includedSchemes = ["TileBased", "PerPixel", "PerPixel - No Duplication Mapping", "Naive - Full", "Naive - Half", "Naive - Quarter", "Naive - OneEighth"]
 
             upperBoundX = sys.maxsize
             for restirScheme in restirSchemes:
@@ -532,17 +535,97 @@ def ExportGraphs():
                     line, = ax.semilogy(xValues, errorValue, label=naiveSchemeToGraphLabel(restirScheme))
 
                     if "Naive" in restirScheme and not "Full" in restirScheme:
+                        line.set_linestyle("dotted")
+
+                    if "PerPixel - No Duplication Mapping" == restirScheme:
                         line.set_dashes([4, 4])
                         line.set_dash_capstyle("round")
 
             xLabel = "Frame" if animatedScene else "time (ms)"
-            ax.set(xlabel=xLabel, ylabel=f"{errorMetric}", title=f"Main schemes {errorMetric} ({scene})")
+            ax.set(xlabel=xLabel, ylabel=f"{errorMetric}", title=f"Main schemes {errorMetric} Over Time ({scene})")
             ax.set_xbound(lower=0, upper=upperBoundX)
             ax.set_ybound(lower=0)
             ax.grid()
             ax.grid(which="minor", color="0.9")
             ax.legend()
             figureName = f"MainSchemes_{errorMetric}_{scene}.pdf"
+            fig.savefig(path.join(figuresPath, figureName), bbox_inches="tight", format="pdf")
+            print(f"Exported {figureName}")
+
+        # Error Metrics Over Frames Naive Scheme
+        errorMetrics = ["MAE", "MSE", "RMSE", "MAPE", "Mean FLIP"]
+        for errorMetric in errorMetrics:
+            if animatedScene:
+                continue
+
+            fig, ax = plt.subplots()
+            excludedSchemes = ["TileBased", "PerPixel", "PerPixel - RISGuarantee" , "PerPixel - No Duplication Mapping"]
+
+            upperBoundX = sys.maxsize
+            for restirScheme in restirSchemes:
+                if restirScheme not in excludedSchemes:
+                    cumulativeFrameTimes, errorValue = graphsDict[scene][restirScheme][errorMetric]
+                    xValues = list(range(len(errorValue)))
+
+                    if(len(xValues) != len(errorValue)):
+                        print(f"ERROR Inconsistent X and Y Axis Value Count: MainSchemes_{errorMetric}_{scene}.pdf")
+                        continue
+
+                    upperBoundX = min(upperBoundX, xValues[-1])
+                    line, = ax.plot(xValues, errorValue, label=naiveSchemeToGraphLabel(restirScheme))
+                    
+                    if restirScheme == "ReSTIR PT":
+                        line.set_dashes([4, 4])
+                        line.set_dash_capstyle("round")
+
+            xLabel = "Frame"
+            ax.set(xlabel=xLabel, ylabel=f"{errorMetric}", title=f"Naive schemes {errorMetric} Over Frames ({scene})")
+            ax.set_xbound(lower=0, upper=10)
+            ax.set_ybound(lower=0)
+            ax.grid()
+            ax.grid(which="minor", color="0.9")
+            ax.legend()
+            figureName = f"NaiveSchemes_{errorMetric}_{scene}_OverFrames.pdf"
+            fig.savefig(path.join(figuresPath, figureName), bbox_inches="tight", format="pdf")
+            print(f"Exported {figureName}")
+
+        # Error Metrics Over Frames Main Schemes
+        errorMetrics = ["MAE", "MSE", "RMSE", "MAPE", "Mean FLIP"]
+        for errorMetric in errorMetrics:
+            if animatedScene:
+                continue
+
+            fig, ax = plt.subplots()
+            includedSchemes = ["TileBased", "PerPixel", "PerPixel - No Duplication Mapping", "Naive - Full", "Naive - Half", "Naive - Quarter", "Naive - OneEighth"]
+
+            upperBoundX = sys.maxsize
+            for restirScheme in restirSchemes:
+                if restirScheme in includedSchemes:
+                    cumulativeFrameTimes, errorValue = graphsDict[scene][restirScheme][errorMetric]
+                    xValues = list(range(len(errorValue)))
+
+                    if(len(xValues) != len(errorValue)):
+                        print(f"ERROR Inconsistent X and Y Axis Value Count: MainSchemes_{errorMetric}_{scene}.pdf")
+                        continue
+
+                    upperBoundX = min(upperBoundX, xValues[-1])
+                    line, = ax.plot(xValues, errorValue, label=naiveSchemeToGraphLabel(restirScheme))
+
+                    if "Naive" in restirScheme and not "Full" in restirScheme:
+                        line.set_linestyle("dotted")
+
+                    if "PerPixel - No Duplication Mapping" == restirScheme:
+                        line.set_dashes([4, 4])
+                        line.set_dash_capstyle("round")
+
+            xLabel = "Frame"
+            ax.set(xlabel=xLabel, ylabel=f"{errorMetric}", title=f"Main schemes {errorMetric} Over Frames ({scene})")
+            ax.set_xbound(lower=0, upper=10)
+            ax.set_ybound(lower=0)
+            ax.grid()
+            ax.grid(which="minor", color="0.9")
+            ax.legend()
+            figureName = f"MainSchemes_{errorMetric}_{scene}_OverFrames.pdf"
             fig.savefig(path.join(figuresPath, figureName), bbox_inches="tight", format="pdf")
             print(f"Exported {figureName}")
 
@@ -597,7 +680,89 @@ def ExportTableData():
     print(f"Exported {exportDictName}")
 
 
-def GatherComparisonData():
+def ExportTables():
+    baseFolder = sys.argv[1]
+    # ImageComparePath = sys.argv[2]
+
+    capturesPath = path.join(baseFolder, "Captures")
+    dictPath = path.join(capturesPath, "performancePerPass.json")
+    
+    figuresPath = path.join(baseFolder, "Figures")
+    tablesPath = path.join(figuresPath, "Tables")
+
+    if not path.exists(dictPath):
+        print(f"Skipped creating LaTeX Table\n")
+        return
+
+    if not path.exists(tablesPath):
+        os.makedirs(tablesPath)
+
+    print(f"Creating LaTeX Table", end="\r")
+
+    dict = {}
+    with open(dictPath, "r") as file:
+        dict = json.load(file)
+
+    rt = "ReSTIRPT_Total"
+    gp = "generatePaths"
+    tp = "tracePaths"
+    tr = "temporalReuse"
+    sr = "spatialReuse"
+    ep = "emissivePowerSamplerUpdate"
+
+    tablesText = ""
+    tablesAppendixText = ""
+
+    for scene in dict.keys():
+        performanceTable = f"""\\begin{{table}}[H]
+\\centering
+\\makebox[\\textwidth][c]
+{{
+\\begin{{adjustbox}}{{max width=1.5\\linewidth}}
+\\begin{{tabular}}{{lllllllll}}
+\\hline
+\\textbf{{Scheme}} & \\textbf{{Total}} & \\textbf{{Generate Paths}} & \\textbf{{Trace Paths}} & \\textbf{{Temporal Reuse}} & \\textbf{{Spatial Reuse}} & \\textbf{{DI + Others}} & \\textbf{{Relative Total}} & \\textbf{{Relative Trace Paths}} \\\\ \\hhline{{=|========}}
+\\multicolumn{{1}}{{l|}}{{Naive - Full}}    & {dict[scene]["Naive - Full"][rt]:.2f} & {dict[scene]["Naive - Full"][gp]:.2f} & {dict[scene]["Naive - Full"][tp]:.2f} & {dict[scene]["Naive - Full"][tr]:.2f} & {dict[scene]["Naive - Full"][sr]:.2f} & {dict[scene]["Naive - Full"][ep]:.2f} & {(dict[scene]["Naive - Full"][rt] / dict[scene]["Naive - Full"][rt]):.2f}x   & {(dict[scene]["Naive - Full"][tp] / dict[scene]["Naive - Full"][tp]):.2f}x \\\\
+\\multicolumn{{1}}{{l|}}{{Naive - 3/4}}     & {dict[scene]["Naive - ThreeQuarters"][rt]:.2f}  & {dict[scene]["Naive - ThreeQuarters"][gp]:.2f}  & {dict[scene]["Naive - ThreeQuarters"][tp]:.2f}  & {dict[scene]["Naive - ThreeQuarters"][tr]:.2f}  & {dict[scene]["Naive - ThreeQuarters"][sr]:.2f}  & {dict[scene]["Naive - ThreeQuarters"][ep]:.2f}  & {(dict[scene]["Naive - ThreeQuarters"][rt] / dict[scene]["Naive - Full"][rt]):.2f}x    & {(dict[scene]["Naive - ThreeQuarters"][tp] / dict[scene]["Naive - Full"][tp]):.2f}x \\\\
+\\multicolumn{{1}}{{l|}}{{Naive - 1/2}}     & {dict[scene]["Naive - Half"][rt]:.2f}  & {dict[scene]["Naive - Half"][gp]:.2f}  & {dict[scene]["Naive - Half"][tp]:.2f}  & {dict[scene]["Naive - Half"][tr]:.2f}  & {dict[scene]["Naive - Half"][sr]:.2f}  & {dict[scene]["Naive - Half"][ep]:.2f}  & {(dict[scene]["Naive - Half"][rt] / dict[scene]["Naive - Full"][rt]):.2f}x    & {(dict[scene]["Naive - Half"][tp] / dict[scene]["Naive - Full"][tp]):.2f}x \\\\
+\\multicolumn{{1}}{{l|}}{{Naive - 1/4}}     & {dict[scene]["Naive - Quarter"][rt]:.2f}  & {dict[scene]["Naive - Quarter"][gp]:.2f}  & {dict[scene]["Naive - Quarter"][tp]:.2f}  & {dict[scene]["Naive - Quarter"][tr]:.2f}  & {dict[scene]["Naive - Quarter"][sr]:.2f}  & {dict[scene]["Naive - Quarter"][ep]:.2f}  & {(dict[scene]["Naive - Quarter"][rt] / dict[scene]["Naive - Full"][rt]):.2f}x    & {(dict[scene]["Naive - Quarter"][tp] / dict[scene]["Naive - Full"][tp]):.2f}x \\\\
+\\multicolumn{{1}}{{l|}}{{Naive - 1/8}}     & {dict[scene]["Naive - OneEighth"][rt]:.2f}  & {dict[scene]["Naive - OneEighth"][gp]:.2f}  & {dict[scene]["Naive - OneEighth"][tp]:.2f}  & {dict[scene]["Naive - OneEighth"][tr]:.2f}  & {dict[scene]["Naive - OneEighth"][sr]:.2f}  & {dict[scene]["Naive - OneEighth"][ep]:.2f}  & {(dict[scene]["Naive - OneEighth"][rt] / dict[scene]["Naive - Full"][rt]):.2f}x    & {(dict[scene]["Naive - OneEighth"][tp] / dict[scene]["Naive - Full"][tp]):.2f}x \\\\
+\\multicolumn{{1}}{{l|}}{{Naive - 1/16}}    & {dict[scene]["Naive - OneSixteenth"][rt]:.2f} & {dict[scene]["Naive - OneSixteenth"][gp]:.2f} & {dict[scene]["Naive - OneSixteenth"][tp]:.2f} & {dict[scene]["Naive - OneSixteenth"][tr]:.2f} & {dict[scene]["Naive - OneSixteenth"][sr]:.2f} & {dict[scene]["Naive - OneSixteenth"][ep]:.2f} & {(dict[scene]["Naive - OneSixteenth"][rt] / dict[scene]["Naive - Full"][rt]):.2f}x   & {(dict[scene]["Naive - OneSixteenth"][tp] / dict[scene]["Naive - Full"][tp]):.2f}x \\\\ \\hline
+&  &  &  &  &  &  &  &  \\\\ \\hline
+\\multicolumn{{1}}{{l|}}{{ReSTIR PT}}       & {dict[scene]["ReSTIR PT"][rt]:.2f}    & {dict[scene]["ReSTIR PT"][gp]:.2f}    & {dict[scene]["ReSTIR PT"][tp]:.2f}    & {dict[scene]["ReSTIR PT"][tr]:.2f}    & {dict[scene]["ReSTIR PT"][sr]:.2f}    & {dict[scene]["ReSTIR PT"][ep]:.2f}    & {(dict[scene]["ReSTIR PT"][rt] / dict[scene]["Naive - Full"][rt]):.2f}x & {(dict[scene]["ReSTIR PT"][tp] / dict[scene]["Naive - Full"][tp]):.2f}x \\\\
+\\multicolumn{{1}}{{l|}}{{Naive - Full}}    & {dict[scene]["Naive - Full"][rt]:.2f} & {dict[scene]["Naive - Full"][gp]:.2f} & {dict[scene]["Naive - Full"][tp]:.2f} & {dict[scene]["Naive - Full"][tr]:.2f} & {dict[scene]["Naive - Full"][sr]:.2f} & {dict[scene]["Naive - Full"][ep]:.2f} & {(dict[scene]["Naive - Full"][rt] / dict[scene]["Naive - Full"][rt]):.2f}x & {(dict[scene]["Naive - Full"][tp] / dict[scene]["Naive - Full"][tp]):.2f}x \\\\
+\\multicolumn{{1}}{{l|}}{{Per-Pixel}}       & {dict[scene]["PerPixel"][rt]:.2f}     & {dict[scene]["PerPixel"][gp]:.2f}     & {dict[scene]["PerPixel"][tp]:.2f}     & {dict[scene]["PerPixel"][tr]:.2f}     & {dict[scene]["PerPixel"][sr]:.2f}     & {dict[scene]["PerPixel"][ep]:.2f}     & {(dict[scene]["PerPixel"][rt] / dict[scene]["Naive - Full"][rt]):.2f}x & {(dict[scene]["PerPixel"][tp] / dict[scene]["Naive - Full"][tp]):.2f}x \\\\
+\\multicolumn{{1}}{{l|}}{{Tile-Based}}      & {dict[scene]["TileBased"][rt]:.2f}    & {dict[scene]["TileBased"][gp]:.2f}    & {dict[scene]["TileBased"][tp]:.2f}    & {dict[scene]["TileBased"][tr]:.2f}    & {dict[scene]["TileBased"][sr]:.2f}    & {dict[scene]["TileBased"][ep]:.2f}    & {(dict[scene]["TileBased"][rt] / dict[scene]["Naive - Full"][rt]):.2f}x & {(dict[scene]["TileBased"][tp] / dict[scene]["Naive - Full"][tp]):.2f}x \\\\ \\hline
+\\end{{tabular}}
+\\end{{adjustbox}}
+}}
+\\caption{{Average performance per pass in milliseconds for each scheme and RIS rate over 50 frames in the {scene} scene together with Total and Trace Paths performance relative to Naive - Full.}}
+\\label{{tab:Performance_{scene}}}
+\\end{{table}}"""
+
+        if "BistroExterior" in scene:
+            if tablesText == "":
+                tablesText = performanceTable
+            else:
+                tablesText = "\n\n".join([tablesText, performanceTable])
+        else:
+            if tablesAppendixText == "":
+                tablesAppendixText = performanceTable
+            else:
+                tablesAppendixText = "\n\n".join([tablesAppendixText, performanceTable])
+
+    tablesFileName = "tables.tex"
+    with open(path.join(tablesPath, tablesFileName), mode="w+") as file:
+        file.write(tablesText)
+
+    tablesFileName = "tablesAppendix.tex"
+    with open(path.join(tablesPath, tablesFileName), mode="w+") as file:
+        file.write(tablesAppendixText)
+
+    print(f"Exported LaTeX Table\n")
+
+
+def ExportComparisonData():
     baseFolder = sys.argv[1]
     capturesFolder = path.join(baseFolder, "Captures")
     comparisonDataFolder = path.join(baseFolder, "ComparisonData")
@@ -653,7 +818,7 @@ def GatherComparisonData():
     print(f"Finished gathering comparison data in {comparisonDataFolder}\n")
 
 
-def CreateComparisonFigures():
+def ExportComparisonFigures():
     baseFolder = sys.argv[1]
     exportFolder = path.join(path.join(baseFolder, "Figures"), "Comparisons")
     comparisonDataFolder = path.join(baseFolder, "ComparisonData")
@@ -718,15 +883,15 @@ def CreateComparisonFigures():
             print(f"Generated {figureName}")
 
             comparisonCount = len(comparisonsDict[scene][comparison].items())
-            figHeight = 347 * comparisonCount
-            figure = plt.figure(figsize=[1548, figHeight, "px"])
+            figHeight = 283 * comparisonCount * 1.5
+            figure = plt.figure(figsize=[1548 * 1.5, figHeight, "px"])
             gs = figure.add_gridspec(regionCount * 2, schemeCount, height_ratios=heightRatios + heightRatios, hspace=0, wspace=0)
             for row, (region, regionCoords) in enumerate(comparisonsDict[scene][comparison].items(), start=0):
                 row = row * 2
                 cropCoords = (regionCoords[0], regionCoords[2], regionCoords[1], regionCoords[3])
 
-                schemeOrder = ["Naive - OneSixteenth", "Naive - OneEighth", "Naive - Quarter", "Naive - Half", "Naive - ThreeQuarters", "Naive - Full", "PerPixel", "TileBased", "Reference"]
-                schemeNames = ["Naive - 1/16", "Naive - 1/8", "Naive - 1/4", "Naive - 1/2", "Naive - 3/4", "Naive - Full", "PerPixel", "TileBased", "Reference"]
+                schemeOrder = ["Naive - OneSixteenth", "Naive - OneEighth", "Naive - Quarter", "Naive - Half", "Naive - ThreeQuarters", "ReSTIR PT", "PerPixel", "TileBased", "Reference"]
+                schemeNames = ["Naive - 1/16", "Naive - 1/8", "Naive - 1/4", "Naive - 1/2", "Naive - 3/4", "ReSTIR PT", "PerPixel", "TileBased", "Reference"]
 
                 schemeOrder = list(reversed(schemeOrder))
                 schemeNames = list(reversed(schemeNames))
@@ -768,13 +933,14 @@ def CreateComparisonFigures():
     
 
 def main():
-    # ExportErrorMetrics()
-    # ExportAverageErrorMetrics()
-    # ExportAverageProfilerData()
+    ExportErrorMetrics()
+    ExportAverageErrorMetrics()
+    ExportAverageProfilerData()
     ExportGraphs()
-    # ExportTableData()
-    GatherComparisonData()
-    CreateComparisonFigures()
+    ExportTableData()
+    ExportTables()
+    ExportComparisonData()
+    ExportComparisonFigures()
 
 
 if __name__ == "__main__":
