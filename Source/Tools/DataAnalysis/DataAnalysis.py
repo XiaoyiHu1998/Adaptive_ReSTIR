@@ -423,7 +423,7 @@ def ExportGraphs():
         # Frametime graph naive schemes
         fig, ax = plt.subplots()
         for restirScheme in restirSchemes:
-            excludedSchemes = ["TileBased", "PerPixel", "PerPixel - RISGuarantee"]
+            excludedSchemes = ["TileBased", "PerPixel", "PerPixel - RISGuarantee", "PerPixel - No Duplication Mapping"]
 
             if restirScheme not in excludedSchemes:
                 cumulativeFrameTimes, frametimes = graphsDict[scene][restirScheme]["frametimes"]
@@ -478,7 +478,7 @@ def ExportGraphs():
         for errorMetric in errorMetrics:
             fig, ax = plt.subplots()
 
-            excludedSchemes = ["TileBased", "PerPixel", "PerPixel - RISGuarantee" , "PerPixel - No Duplication Mapping"]
+            excludedSchemes = ["TileBased", "PerPixel", "PerPixel - RISGuarantee", "PerPixel - No Duplication Mapping"]
 
             upperBoundX = sys.maxsize
             for restirScheme in restirSchemes:
@@ -559,7 +559,7 @@ def ExportGraphs():
                 continue
 
             fig, ax = plt.subplots()
-            excludedSchemes = ["TileBased", "PerPixel", "PerPixel - RISGuarantee" , "PerPixel - No Duplication Mapping"]
+            excludedSchemes = ["TileBased", "PerPixel", "PerPixel - RISGuarantee", "PerPixel - No Duplication Mapping"]
 
             upperBoundX = sys.maxsize
             for restirScheme in restirSchemes:
@@ -713,14 +713,20 @@ def ExportTables():
     tablesText = ""
     tablesAppendixText = ""
 
+    tableWidth = "1.45"
+    tableAppendixWidth = "1.45"
+
     for scene in dict.keys():
+        mainTable = "BistroExterior" in scene or "BistroInteriorAnimated" == scene
+        width = tableWidth if mainTable else tableAppendixWidth
         performanceTable = f"""\\begin{{table}}[H]
 \\centering
 \\makebox[\\textwidth][c]
 {{
-\\begin{{adjustbox}}{{max width=1.5\\linewidth}}
+\\begin{{adjustbox}}{{max width={width}\\linewidth}}
 \\begin{{tabular}}{{lllllllll}}
-\\hline
+\\multicolumn{{9}}{{c}}{{\\underline{{\\textbf{{{scene}}}}}}} \\\\
+&  &  &  &  &  &  &  &  \\\\ \\hline
 \\textbf{{Scheme}} & \\textbf{{Total}} & \\textbf{{Generate Paths}} & \\textbf{{Trace Paths}} & \\textbf{{Temporal Reuse}} & \\textbf{{Spatial Reuse}} & \\textbf{{DI + Others}} & \\textbf{{Relative Total}} & \\textbf{{Relative Trace Paths}} \\\\ \\hhline{{=|========}}
 \\multicolumn{{1}}{{l|}}{{Naive - Full}}    & {dict[scene]["Naive - Full"][rt]:.2f} & {dict[scene]["Naive - Full"][gp]:.2f} & {dict[scene]["Naive - Full"][tp]:.2f} & {dict[scene]["Naive - Full"][tr]:.2f} & {dict[scene]["Naive - Full"][sr]:.2f} & {dict[scene]["Naive - Full"][ep]:.2f} & {(dict[scene]["Naive - Full"][rt] / dict[scene]["Naive - Full"][rt]):.2f}x   & {(dict[scene]["Naive - Full"][tp] / dict[scene]["Naive - Full"][tp]):.2f}x \\\\
 \\multicolumn{{1}}{{l|}}{{Naive - 3/4}}     & {dict[scene]["Naive - ThreeQuarters"][rt]:.2f}  & {dict[scene]["Naive - ThreeQuarters"][gp]:.2f}  & {dict[scene]["Naive - ThreeQuarters"][tp]:.2f}  & {dict[scene]["Naive - ThreeQuarters"][tr]:.2f}  & {dict[scene]["Naive - ThreeQuarters"][sr]:.2f}  & {dict[scene]["Naive - ThreeQuarters"][ep]:.2f}  & {(dict[scene]["Naive - ThreeQuarters"][rt] / dict[scene]["Naive - Full"][rt]):.2f}x    & {(dict[scene]["Naive - ThreeQuarters"][tp] / dict[scene]["Naive - Full"][tp]):.2f}x \\\\
@@ -740,7 +746,7 @@ def ExportTables():
 \\label{{tab:Performance_{scene}}}
 \\end{{table}}"""
 
-        if "BistroExterior" in scene:
+        if mainTable:
             if tablesText == "":
                 tablesText = performanceTable
             else:
@@ -933,14 +939,14 @@ def ExportComparisonFigures():
     
 
 def main():
-    ExportErrorMetrics()
-    ExportAverageErrorMetrics()
-    ExportAverageProfilerData()
-    ExportGraphs()
-    ExportTableData()
+    # ExportErrorMetrics()
+    # ExportAverageErrorMetrics()
+    # ExportAverageProfilerData()
+    # ExportGraphs()
+    # ExportTableData()
     ExportTables()
-    ExportComparisonData()
-    ExportComparisonFigures()
+    # ExportComparisonData()
+    # ExportComparisonFigures()
 
 
 if __name__ == "__main__":
