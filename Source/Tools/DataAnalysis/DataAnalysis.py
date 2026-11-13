@@ -408,9 +408,13 @@ def ExportGraphs():
 
     graphsDict = GenerateGraphsDict()
 
-    figuresPath = path.join(path.join(baseFolder, "Figures"), "Graphs")
+    figuresPath = path.join(path.join(baseFolder, "Figures"), "Graphs PDF")
     if not path.exists(figuresPath):
         os.makedirs(figuresPath)
+
+    figuresPNGPath = path.join(path.join(baseFolder, "Figures"), "Graphs PNG")
+    if not path.exists(figuresPNGPath):
+        os.makedirs(figuresPNGPath)
 
     schemeOrder = {"ReSTIR PT": 11, "Naive - Full": 1, "Naive - ThreeQuarters": 2, "Naive - Half": 3, "Naive - Quarter": 4, "Naive - OneEighth": 5, "Naive - OneSixteenth": 6, "PerPixel": 7, "TileBased": 8, "PerPixel - RISGuarantee": 9, "PerPixel - No Duplication Mapping": 10}
 
@@ -442,6 +446,10 @@ def ExportGraphs():
         fig.savefig(path.join(figuresPath, figureName), bbox_inches="tight", format="pdf")
         print(f"Exported {figureName}")
 
+        figureName = f"NaiveSchemes_FrameTimes_{scene}.png"
+        fig.savefig(path.join(figuresPNGPath, figureName), bbox_inches="tight", format="png")
+        print(f"Exported {figureName}")
+
         # Frametime graph main schemes
         fig, ax = plt.subplots()
         for restirScheme in restirSchemes:
@@ -471,6 +479,10 @@ def ExportGraphs():
         ax.legend()
         figureName = f"MainSchemes_FrameTimes_{scene}.pdf"
         fig.savefig(path.join(figuresPath, figureName), bbox_inches="tight", format="pdf")
+        print(f"Exported {figureName}")
+
+        figureName = f"MainSchemes_FrameTimes_{scene}.png"
+        fig.savefig(path.join(figuresPNGPath, figureName), bbox_inches="tight", format="png")
         print(f"Exported {figureName}")
 
         # Error Metrics Over Time Naive Scheme
@@ -509,6 +521,10 @@ def ExportGraphs():
             ax.legend()
             figureName = f"NaiveSchemes_{errorMetric}_{scene}.pdf"
             fig.savefig(path.join(figuresPath, figureName), bbox_inches="tight", format="pdf")
+            print(f"Exported {figureName}")
+
+            figureName = f"NaiveSchemes_{errorMetric}_{scene}.png"
+            fig.savefig(path.join(figuresPNGPath, figureName), bbox_inches="tight", format="png")
             print(f"Exported {figureName}")
 
         # Error Metrics Over Time Main Schemes
@@ -552,6 +568,10 @@ def ExportGraphs():
             fig.savefig(path.join(figuresPath, figureName), bbox_inches="tight", format="pdf")
             print(f"Exported {figureName}")
 
+            figureName = f"MainSchemes_{errorMetric}_{scene}.png"
+            fig.savefig(path.join(figuresPNGPath, figureName), bbox_inches="tight", format="png")
+            print(f"Exported {figureName}")
+
         # Error Metrics Over Frames Naive Scheme
         errorMetrics = ["MAE", "MSE", "RMSE", "MAPE", "Mean FLIP"]
         for errorMetric in errorMetrics:
@@ -587,6 +607,10 @@ def ExportGraphs():
             ax.legend()
             figureName = f"NaiveSchemes_{errorMetric}_{scene}_OverFrames.pdf"
             fig.savefig(path.join(figuresPath, figureName), bbox_inches="tight", format="pdf")
+            print(f"Exported {figureName}")
+
+            figureName = f"NaiveSchemes_{errorMetric}_{scene}_OverFrames.png"
+            fig.savefig(path.join(figuresPNGPath, figureName), bbox_inches="tight", format="png")
             print(f"Exported {figureName}")
 
         # Error Metrics Over Frames Main Schemes
@@ -627,6 +651,10 @@ def ExportGraphs():
             ax.legend()
             figureName = f"MainSchemes_{errorMetric}_{scene}_OverFrames.pdf"
             fig.savefig(path.join(figuresPath, figureName), bbox_inches="tight", format="pdf")
+            print(f"Exported {figureName}")
+
+            figureName = f"MainSchemes_{errorMetric}_{scene}_OverFrames.png"
+            fig.savefig(path.join(figuresPNGPath, figureName), bbox_inches="tight", format="png")
             print(f"Exported {figureName}")
 
     print("Finished Exporting Graphs\n")
@@ -779,7 +807,7 @@ def ExportComparisonData():
     for captureScene in captureScenes:
         sceneFolder = path.join(comparisonDataFolder, captureScene)
         if not path.exists(sceneFolder):
-            os.mkdir(sceneFolder)
+            os.makedirs(sceneFolder)
 
         captureSceneFolder = path.join(capturesFolder, captureScene)
         schemes = [subfolder for subfolder in os.listdir(captureSceneFolder) if subfolder.split("_")[-1] == "1" or subfolder == "Reference"]
@@ -826,11 +854,15 @@ def ExportComparisonData():
 
 def ExportComparisonFigures():
     baseFolder = sys.argv[1]
-    exportFolder = path.join(path.join(baseFolder, "Figures"), "Comparisons")
+    exportFolder = path.join(path.join(baseFolder, "Figures"), "Comparisons PDF")
+    exportPNGFolder = path.join(path.join(baseFolder, "Figures"), "Comparisons PNG")
     comparisonDataFolder = path.join(baseFolder, "ComparisonData")
 
     if not path.exists(exportFolder):
         os.makedirs(exportFolder)
+
+    if not path.exists(exportPNGFolder):
+        os.makedirs(exportPNGFolder)
 
     scenes = [subfolder for subfolder in os.listdir(comparisonDataFolder) if path.isdir(path.join(comparisonDataFolder, subfolder))]
     imagesDict = {}
@@ -888,6 +920,10 @@ def ExportComparisonFigures():
             plt.savefig(path.join(exportFolder, figureName), bbox_inches="tight", dpi="figure", pad_inches=0, format="pdf")
             print(f"Generated {figureName}")
 
+            figureName = f"{scene}_{comparison}_Top.png"
+            plt.savefig(path.join(exportPNGFolder, figureName), bbox_inches="tight", dpi="figure", pad_inches=0, format="png")
+            print(f"Generated {figureName}")
+
             comparisonCount = len(comparisonsDict[scene][comparison].items())
             figHeight = 283 * comparisonCount * 1.5
             figure = plt.figure(figsize=[1548 * 1.5, figHeight, "px"])
@@ -935,18 +971,22 @@ def ExportComparisonFigures():
             plt.savefig(path.join(exportFolder, figureName), bbox_inches="tight", dpi=300, pad_inches=0, format="pdf")
             print(f"Generated {figureName}")
 
+            figureName = f"{scene}_{comparison}_Bottom.png"
+            plt.savefig(path.join(exportPNGFolder, figureName), bbox_inches="tight", dpi=300, pad_inches=0, format="png")
+            print(f"Generated {figureName}")
+
     print("Finished Generating Comparison Figures\n")
     
 
 def main():
-    # ExportErrorMetrics()
-    # ExportAverageErrorMetrics()
-    # ExportAverageProfilerData()
-    # ExportGraphs()
-    # ExportTableData()
+    ExportErrorMetrics()
+    ExportAverageErrorMetrics()
+    ExportAverageProfilerData()
+    ExportGraphs()
+    ExportTableData()
     ExportTables()
-    # ExportComparisonData()
-    # ExportComparisonFigures()
+    ExportComparisonData()
+    ExportComparisonFigures()
 
 
 if __name__ == "__main__":
