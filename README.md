@@ -11,6 +11,7 @@ The changes to ReSTIR PT in the Adaptive ReSTIR implementation mainly lie within
 -  `GeneratePathsNaive.cs.slang`
 -  `GeneratePathsPerPixel.cs.slang`
 -  `GeneratePathsTileBased.cs.slang`
+-  `TracePass.cs.slang`
 -  `TemporalReuse.cs.slang`
 -  `ReSTIRPTPass.cpp`
 -  `ReSTIRPTPass.h`
