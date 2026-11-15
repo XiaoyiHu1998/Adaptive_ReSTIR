@@ -791,10 +791,6 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
                         PathRetracePass(pRenderContext, restir_i, renderData, true, 0);
                     // a separate pass to trace rays for hybrid shift/random number replay
                     PathReusePass(pRenderContext, restir_i, renderData, true, 0, !mEnableSpatialReuse, skipTemporalReuse);
-
-                    // Per pixel and Tile based path generation use seperate pass for non RIS candidates
-                    // if (mEnableAdaptiveRISPerPixel || mEnableAdaptiveRISTileBased)
-                    //     PathReusePass(pRenderContext, restir_i, renderData, true, 0, !mEnableSpatialReuse);
                 }
 
                 mValidAdaptiveHistory = mEnableAdaptiveTemporalReuse;
@@ -979,54 +975,67 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
         }
 
         // Adaptive ReSTIR
-        dirty |= widget.checkbox("Adaptive RIS", mEnableAdaptiveRIS);
-        if (mEnableAdaptiveRIS)
+        if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
         {
-            if (auto group = widget.group("Adaptive RIS Parameters", true))
+            dirty |= widget.checkbox("Adaptive RIS", mEnableAdaptiveRIS);
+            if (mEnableAdaptiveRIS)
             {
-                dirty |= widget.dropdown("Scheme", kAdaptiveRIS, reinterpret_cast<uint32_t&>(mAdaptiveRISScheme));
-
-                switch (mAdaptiveRISScheme)
+                if (auto group = widget.group("Adaptive RIS Parameters", true))
                 {
-                case AdaptiveRIS::Naive:
-                    dirty |= widget.dropdown("Sampling Rate", kSamplingRateRIS, reinterpret_cast<uint32_t&>(mSamplingRateRIS));
-                    break;
-                case AdaptiveRIS::PerPixel:
-                    dirty |= widget.var("Min Chance", mAdaptiveMinPerPixelRISRate);
-                    dirty |= widget.var("Max Chance", mAdaptiveMaxPerPixelRISRate);
-                    dirty |= widget.var("Min Motion Distance", mMinMotionDistancePerPixel);
-                    dirty |= widget.var("Max Motion Distance", mMaxMotionDistancePerPixel);
-                    dirty |= widget.var("Min Motion Sampling Chance", mMinMotionSamplingChancePerPixel);
-                    dirty |= widget.var("Max Motion Sampling Chance", mMaxMotionSamplingChancePerPixel);
-                    dirty |= widget.checkbox("Duplication Mapping", mEnableDuplicationMapping);
-                    dirty |= widget.var("Duplication Mapping Alpha", mDuplicationMappingAlpha);
-                    break;
-                case AdaptiveRIS::TileBased:
-                    dirty |= widget.dropdown("Min Tile RIS Rate", kSamplingRateRIS, reinterpret_cast<uint32_t&>(mAdaptiveRISTileBasedMinRate));
-                    dirty |= widget.var("Min Motion Distance", mMinMotionDistanceTileBased);
-                    dirty |= widget.var("Max Motion Distance", mMaxMotionDistanceTileBased);
-                    dirty |= widget.var("Min Motion Sampling Chance", mMinMotionSamplingChanceTileBased);
-                    dirty |= widget.var("Max Motion Sampling Chance", mMaxMotionSamplingChanceTileBased);
-                    dirty |= widget.checkbox("Duplication Mapping", mEnableDuplicationMapping);
-                    dirty |= widget.var("Duplication Mapping Alpha", mDuplicationMappingAlpha);
-                    break;
-                default:
-                    break;
+                    dirty |= widget.dropdown("Scheme", kAdaptiveRIS, reinterpret_cast<uint32_t&>(mAdaptiveRISScheme));
+
+                    switch (mAdaptiveRISScheme)
+                    {
+                    case AdaptiveRIS::Naive:
+                        dirty |= widget.dropdown("Sampling Rate", kSamplingRateRIS, reinterpret_cast<uint32_t&>(mSamplingRateRIS));
+                        break;
+                    case AdaptiveRIS::PerPixel:
+                        dirty |= widget.var("Min Chance", mAdaptiveMinPerPixelRISRate);
+                        dirty |= widget.var("Max Chance", mAdaptiveMaxPerPixelRISRate);
+                        dirty |= widget.var("Min Motion Distance", mMinMotionDistancePerPixel);
+                        dirty |= widget.var("Max Motion Distance", mMaxMotionDistancePerPixel);
+                        dirty |= widget.var("Min Motion Sampling Chance", mMinMotionSamplingChancePerPixel);
+                        dirty |= widget.var("Max Motion Sampling Chance", mMaxMotionSamplingChancePerPixel);
+                        dirty |= widget.checkbox("Duplication Mapping", mEnableDuplicationMapping);
+                        dirty |= widget.var("Duplication Mapping Alpha", mDuplicationMappingAlpha);
+                        break;
+                    case AdaptiveRIS::TileBased:
+                        dirty |= widget.dropdown("Min Tile RIS Rate", kSamplingRateRIS, reinterpret_cast<uint32_t&>(mAdaptiveRISTileBasedMinRate));
+                        dirty |= widget.var("Min Motion Distance", mMinMotionDistanceTileBased);
+                        dirty |= widget.var("Max Motion Distance", mMaxMotionDistanceTileBased);
+                        dirty |= widget.var("Min Motion Sampling Chance", mMinMotionSamplingChanceTileBased);
+                        dirty |= widget.var("Max Motion Sampling Chance", mMaxMotionSamplingChanceTileBased);
+                        dirty |= widget.checkbox("Duplication Mapping", mEnableDuplicationMapping);
+                        dirty |= widget.var("Duplication Mapping Alpha", mDuplicationMappingAlpha);
+                        break;
+                    default:
+                        break;
+                    }
                 }
             }
-        }
 
-        if (widget.checkbox("Adaptive Temporal Reuse", mEnableAdaptiveTemporalReuse))
-        {
-            dirty = true;
-            mEnableTemporalReuse &= !mEnableAdaptiveTemporalReuse;
-        }
+            if (dirty && mEnableAdaptiveRIS)
+            {
+                mEnableTemporalReuse = false;
+                mEnableAdaptiveTemporalReuse = true;
+            }
+            else if(dirty && !mEnableAdaptiveRIS)
+            {
+                mEnableTemporalReuse = true;
+                mEnableAdaptiveTemporalReuse = false;
+            }
 
-        if (mEnableAdaptiveTemporalReuse)
-        {
-            dirty |= widget.var("Adaptive Temporal History Cap", mAdaptiveTemporalHistoryCap, 0.0f, 100.0f);
-        }
+            if (widget.checkbox("Adaptive Temporal Reuse", mEnableAdaptiveTemporalReuse))
+            {
+                dirty = true;
+                mEnableTemporalReuse &= !mEnableAdaptiveTemporalReuse;
+            }
 
+            if (mEnableAdaptiveTemporalReuse)
+            {
+                dirty |= widget.var("Adaptive Temporal History Cap", mAdaptiveTemporalHistoryCap, 0.0f, 100.0f);
+            }
+        }
 
         // ReSTIR PT
         if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
