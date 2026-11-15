@@ -7,9 +7,17 @@ The thesis focuses on exploring how ReSTIR behaves when sampling at lower than 1
 
 The results show sampling rates can naively be reduced to 0.75 and 0.5 s.p.p. with minimal visual quality loss. Using the adaptive sampling schemes it is possible to get more visual quality per ray and therefore reduce RIS rates even further while maintaining image quality. The implementation is built upon Nvidia's ReSTIR PT implementation in Falcor [here](https://github.com/DQLin/ReSTIR_PT).
 
+The changes to ReSTIR PT in the Adaptive ReSTIR implementation mainly lie within the following files in `Source\RenderPasses\ReSTIRPTPass\`:
+-  `GeneratePathsNaive.cs.slang`
+-  `GeneratePathsPerPixel.cs.slang`
+-  `GeneratePathsTileBased.cs.slang`
+-  `TemporalReuse.cs.slang`
+-  `ReSTIRPTPass.cpp`
+-  `ReSTIRPTPass.h`
+
 Follow the original ReSTIR PT repository readme below for build instructions.
 
-**Important:** After building `ReSTIRPTPass` in the solution, copy the files `GeneratePathsNaive.cs.slang`, `GeneratePathsPerPixel.cs.slang` and `GeneratePathsTileBased.cs.slang` in `Source\RenderPasses\ReSTIRPTPass\` to `Bin\x64\Release\Shaders\RenderPasses\ReSTIRPTPass` to prevent crashes.
+**Important:** After building `ReSTIRPTPass` in the solution, copy the files `GeneratePathsNaive.cs.slang`, `GeneratePathsPerPixel.cs.slang` and `GeneratePathsTileBased.cs.slang` in `Source\RenderPasses\ReSTIRPTPass\` to `Bin\x64\Release\Shaders\RenderPasses\ReSTIRPTPass\` to prevent crashes.
 
 # ReSTIR Path Tracing (ReSTIR PT)
 ![](teaser.jpg)
