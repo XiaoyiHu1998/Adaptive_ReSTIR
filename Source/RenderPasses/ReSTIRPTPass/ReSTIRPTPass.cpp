@@ -999,7 +999,10 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
 
             if (mEnableTemporalReuse)
             {
-                dirty |= widget.var("Adaptive Temporal History Cap", mAdaptiveTemporalHistoryCap, 0.0f, 100.0f);
+                if (auto group = widget.group("Adaptive Temporal Reuse", true))
+                {
+                    dirty |= widget.var("Adaptive Temporal History Cap", mAdaptiveTemporalHistoryCap, 0.0f, 100.0f);
+                }
             }
         }
 
