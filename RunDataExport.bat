@@ -11,7 +11,7 @@ Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\Arcade_ProfilerDat
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\Arcade_ProfilerData_4.py
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\Arcade_ProfilerData_5.py
 
-@REM @REM BistroExterior
+@REM BistroExterior
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\BistroExterior_FrameData_1.py
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\BistroExterior_FrameData_2.py
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\BistroExterior_FrameData_3.py
@@ -24,7 +24,7 @@ Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\BistroExterior_Pro
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\BistroExterior_ProfilerData_4.py
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\BistroExterior_ProfilerData_5.py
 
-@REM @REM BistroInterior
+@REM BistroInterior
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\BistroInterior_FrameData_1.py
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\BistroInterior_FrameData_2.py
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\BistroInterior_FrameData_3.py
@@ -50,7 +50,7 @@ Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\VeachAjar_Profiler
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\VeachAjar_ProfilerData_4.py
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\VeachAjar_ProfilerData_5.py
 
-@REM @REM BistroExteriorAnimated
+@REM BistroExteriorAnimated
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\BistroExteriorAnimated_FrameData_1.py
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\BistroExteriorAnimated_FrameData_2.py
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\BistroExteriorAnimated_FrameData_3.py
@@ -63,7 +63,7 @@ Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\BistroExteriorAnim
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\BistroExteriorAnimated_ProfilerData_4.py
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\BistroExteriorAnimated_ProfilerData_5.py
 
-@REM @REM BistroInteriorAnimated
+@REM BistroInteriorAnimated
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\BistroInteriorAnimated_FrameData_1.py
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\BistroInteriorAnimated_FrameData_2.py
 Bin\x64\Release\Mogwai.exe --script=Source\Mogwai\Data\Export\BistroInteriorAnimated_FrameData_3.py

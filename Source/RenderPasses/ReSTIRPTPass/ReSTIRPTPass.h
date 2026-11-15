@@ -218,7 +218,7 @@ private:
 
     // Adaptive RIS Path Generation
     bool mEnableAdaptiveRIS = true;
-    AdaptiveRIS mAdaptiveRISScheme = AdaptiveRIS::PerPixel;
+    AdaptiveRIS mAdaptiveRISScheme = AdaptiveRIS::TileBased;
 
     // Naive
     uint mSamplingRateRIS = 0;
