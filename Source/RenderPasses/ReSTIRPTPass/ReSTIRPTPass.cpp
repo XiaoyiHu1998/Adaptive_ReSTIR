@@ -779,31 +779,12 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
             }
         }
 
-        //Adaptive ReSTIR Temporal Reuse pass
         if (mStaticParams.pathSamplingMode != PathSamplingMode::PathTracing)
         {
             // Launch restir merge pass.
             if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
             {
-                if (mEnableAdaptiveTemporalReuse && mValidAdaptiveHistory)
-                {
-                    if (mStaticParams.shiftStrategy == ShiftMapping::Hybrid)
-                        PathRetracePass(pRenderContext, restir_i, renderData, true, 0);
-                    // a separate pass to trace rays for hybrid shift/random number replay
-                    PathReusePass(pRenderContext, restir_i, renderData, true, 0, !mEnableSpatialReuse, skipTemporalReuse);
-                }
-
-                mValidAdaptiveHistory = mEnableAdaptiveTemporalReuse;
-            }
-        }
-
-        // Regular ReSTIR SpatioTemporal reuse passes
-        if (mStaticParams.pathSamplingMode != PathSamplingMode::PathTracing)
-        {
-            // Launch restir merge pass.
-            if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
-            {
-                if (mEnableTemporalReuse && !skipTemporalReuse && !mEnableAdaptiveTemporalReuse)
+                if (mEnableTemporalReuse && !skipTemporalReuse && !(mEnableAdaptiveRIS && !mValidAdaptiveHistory))
                 {
                     if (mStaticParams.shiftStrategy == ShiftMapping::Hybrid)
                         PathRetracePass(pRenderContext, restir_i, renderData, true, 0);
@@ -815,6 +796,8 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
             {
                 PathReusePass(pRenderContext, restir_i, renderData, false, -1, false);
             }
+            
+            mValidAdaptiveHistory = mEnableAdaptiveRIS && !skipTemporalReuse;
 
             if (mEnableSpatialReuse)
             {
@@ -831,7 +814,7 @@ void ReSTIRPTPass::execute(RenderContext* pRenderContext, const RenderData& rend
             if (restir_i == numPasses - 1)
                 mReservoirFrameCount++; // mark as at least one temporally reused frame
 
-            if ((mEnableTemporalReuse || mEnableAdaptiveTemporalReuse) && mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
+            if (mEnableTemporalReuse && mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
             {
                 if ((!mEnableSpatialReuse || mNumSpatialRounds % 2 == 0))
                     pRenderContext->copyResource(mpTemporalReservoirs[restir_i].get(), mpOutputReservoirs.get());
@@ -1014,24 +997,7 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
                 }
             }
 
-            if (dirty && mEnableAdaptiveRIS)
-            {
-                mEnableTemporalReuse = false;
-                mEnableAdaptiveTemporalReuse = true;
-            }
-            else if(dirty && !mEnableAdaptiveRIS)
-            {
-                mEnableTemporalReuse = true;
-                mEnableAdaptiveTemporalReuse = false;
-            }
-
-            if (widget.checkbox("Adaptive Temporal Reuse", mEnableAdaptiveTemporalReuse))
-            {
-                dirty = true;
-                mEnableTemporalReuse &= !mEnableAdaptiveTemporalReuse;
-            }
-
-            if (mEnableAdaptiveTemporalReuse)
+            if (mEnableTemporalReuse)
             {
                 dirty |= widget.var("Adaptive Temporal History Cap", mAdaptiveTemporalHistoryCap, 0.0f, 100.0f);
             }
@@ -1040,11 +1006,7 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
         // ReSTIR PT
         if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR)
         {
-            if (widget.checkbox("Temporal Reuse (Incompatible with Adaptive RIS)", mEnableTemporalReuse))
-            {
-                dirty = true;
-                mEnableAdaptiveTemporalReuse &= !mEnableTemporalReuse;
-            }
+            dirty |= widget.checkbox("Temporal Reuse", mEnableTemporalReuse);
             dirty |= widget.checkbox("Spatial Reuse", mEnableSpatialReuse);
         }
 
@@ -1075,7 +1037,7 @@ bool ReSTIRPTPass::renderRenderingUI(Gui::Widgets& widget)
             }
         }
 
-        if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR && (mEnableTemporalReuse || mEnableAdaptiveTemporalReuse))
+        if (mStaticParams.pathSamplingMode == PathSamplingMode::ReSTIR && mEnableTemporalReuse)
         {
             if (auto group = widget.group("Temporal reuse controls", true))
             {
@@ -1903,7 +1865,6 @@ void ReSTIRPTPass::tracePass(RenderContext* pRenderContext, const RenderData& re
     // Bind the path tracer.
     var["gPathTracer"] = mpPathTracerBlock;
     var["CB"]["gSampleId"] = sampleID;
-    var["CB"]["gMergePaths"] = mEnableAdaptiveTemporalReuse && mValidAdaptiveHistory ? 1 : 0;
     var["gRISPathIDs"] = mRISPathIDs;
     var["outputReservoirs"] = mpOutputReservoirs;
     
@@ -1967,7 +1928,7 @@ void ReSTIRPTPass::PathReusePass(RenderContext* pRenderContext, uint32_t restir_
     if (isTemporalReuse)
     {
         // Adaptive ReSTIR
-        var["gAdaptiveTemporalReuse"] = mEnableAdaptiveTemporalReuse;
+        var["gAdaptiveTemporalReuse"] = mEnableAdaptiveRIS;
         var["gAdaptiveTemporalHistoryCap"] = mAdaptiveTemporalHistoryCap;
         
         uint frameSelectionShift = ((mReservoirFrameCount % 16) % 2) ? 0 : 16;
@@ -1982,8 +1943,6 @@ void ReSTIRPTPass::PathReusePass(RenderContext* pRenderContext, uint32_t restir_
         var["gEnableDuplicationMapping"] = mEnableDuplicationMapping && mEnableAdaptiveRIS && (mAdaptiveRISScheme == AdaptiveRIS::PerPixel || mAdaptiveRISScheme == AdaptiveRIS::TileBased);
         var["gDuplicationMap"] = mDuplicationMap->asBuffer();
         var["gDuplicationMappingAlpha"] = mDuplicationMappingAlpha;
-
-        var["gSkipTemporalReuse"] = skipTemporalReuse;
 
         var["temporalVbuffer"] = mpTemporalVBuffer;
         var["motionVectors"] = renderData[kInputMotionVectors]->asTexture();

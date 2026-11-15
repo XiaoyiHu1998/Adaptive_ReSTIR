@@ -191,7 +191,7 @@ private:
     uint64_t                        mAccumulatedShadowRayCount = 0;
 
     // params below
-    bool                            mEnableTemporalReuse = false;
+    bool                            mEnableTemporalReuse = true;
     bool                            mEnableSpatialReuse = true;
     SpatialReusePattern             mSpatialReusePattern = SpatialReusePattern::Default;
     PathReusePattern                mPathReusePattern = PathReusePattern::NRooksShift;
@@ -255,7 +255,6 @@ private:
     Buffer::SharedPtr mPixelCandidateStatus = Buffer::create(mPixelCandidateStatusData.size() * sizeof(uint), ResourceBindFlags::UnorderedAccess, Buffer::CpuAccess::Read, mPixelCandidateStatusData.data());
 
     // Adaptive Temporal Reuse
-    bool mEnableAdaptiveTemporalReuse = true;
     bool mValidAdaptiveHistory = false;
     float mAdaptiveTemporalHistoryCap = 20.0f;
 

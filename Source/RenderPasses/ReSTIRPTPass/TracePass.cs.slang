@@ -20,7 +20,6 @@ RWStructuredBuffer<PathReservoir> outputReservoirs; // reservoir for next pass
 cbuffer CB
 {
     int gSampleId;
-    int gMergePaths;
 }
 
 PathReservoir tracePath(uint pathID, inout PathReservoir giReservoir, uint sampleIdx)

@@ -59,8 +59,6 @@ struct PathReusePass
     bool gEnableDuplicationMapping;
     float gDuplicationMappingAlpha;
 
-    bool gSkipTemporalReuse;
-
     bool isValidPackedHitInfo(PackedHitInfo packed)
     {
         return packed.x != 0;
@@ -355,7 +353,7 @@ struct PathReusePass
     {
         uint2 pixel = _pixel;
 
-        if (any(pixel >= params.frameDim) || gSkipTemporalReuse) return;
+        if (any(pixel >= params.frameDim)) return;
 
         printSetPixel(pixel);
         logSetPixel(pixel);
