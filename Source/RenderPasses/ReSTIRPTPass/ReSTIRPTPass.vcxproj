@@ -38,6 +38,9 @@
   <ItemGroup>
     <ShaderSource Include="ComputePathReuseMISWeights.cs.slang" />
     <ShaderSource Include="GeneratePaths.cs.slang" />
+    <ShaderSource Include="GeneratePathsNaive.cs.slang" />
+    <ShaderSource Include="GeneratePathsPerPixel.cs.slang" />
+    <ShaderSource Include="GeneratePathsTileBased.cs.slang" />
     <ShaderSource Include="LoadShadingData.slang" />
     <ShaderSource Include="NRDHelpers.slang" />
     <ShaderSource Include="Params.slang" />
