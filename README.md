@@ -17,10 +17,9 @@ The changes to ReSTIR PT in the Adaptive ReSTIR implementation mainly lie within
 -  `ReSTIRPTPass.h`
 
 Testing scenes can be found on Nvidia's [ORCA](https://developer.nvidia.com/orca) page and [Benedikt Bitterli's rendering resources](https://benedikt-bitterli.me/resources/).
+Data export and analysis scripts currently still require hard coded paths, that will be updated soon.
 
 Follow the original ReSTIR PT repository readme below for build instructions.
-
-**Important:** Copy `GeneratePathsNaive.cs.slang`, `GeneratePathsPerPixel.cs.slang` and `GeneratePathsTileBased.cs.slang` in `Source\RenderPasses\ReSTIRPTPass` to `Bin\x64\Release\Shaders\RenderPasses\ReSTIRPTPass` after building `ReSTIRPTPass` in the solution.
 
 # ReSTIR Path Tracing (ReSTIR PT)
 ![](teaser.jpg)
